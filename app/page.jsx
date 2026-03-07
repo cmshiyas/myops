@@ -170,6 +170,56 @@ const GlobalStyles = () => (
     .plan-divider{height:1px;background:var(--border);margin:1.25rem 0}
     .locked-tile{position:relative;overflow:hidden}
     .locked-tile::after{content:'🔒 Upgrade to unlock';position:absolute;inset:0;background:rgba(245,240,232,.92);display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:600;color:var(--muted);letter-spacing:.04em;backdrop-filter:blur(2px)}
+    /* ── Hamburger button ── */
+    .hamburger{display:none;flex-direction:column;justify-content:center;gap:5px;background:none;border:none;cursor:pointer;padding:.4rem;z-index:200}
+    .hamburger span{display:block;width:22px;height:2px;background:var(--paper);border-radius:2px;transition:all .3s}
+    .hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+    .hamburger.open span:nth-child(2){opacity:0;transform:scaleX(0)}
+    .hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+    /* ── Mobile nav drawer ── */
+    .mobile-nav{display:none;position:fixed;inset:0;top:64px;background:var(--ink);z-index:99;flex-direction:column;padding:1.5rem;gap:.25rem;overflow-y:auto;border-top:1px solid rgba(201,168,76,.2);animation:slideDown .25s ease}
+    @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+    .mobile-nav.open{display:flex}
+    .mobile-nav .nav-link{width:100%;text-align:left;padding:.9rem 1rem;font-size:.95rem;border-radius:8px;opacity:.8}
+    .mobile-nav .nav-link.active{opacity:1;background:rgba(201,168,76,.1)}
+    .mobile-nav .nav-cta{width:100%;padding:.9rem;font-size:.95rem;border-radius:8px;text-align:center;margin-top:.5rem}
+    .mobile-nav .plan-pill{width:100%;text-align:left;padding:.9rem 1rem;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;border:1px solid rgba(201,168,76,.25)}
+    .mobile-nav-divider{height:1px;background:rgba(255,255,255,.08);margin:.5rem 0}
+    /* ── Responsive breakpoints ── */
+    @media(max-width:768px){
+      .hamburger{display:flex}
+      .nav-links{display:none}
+      .hero{padding:3rem 1.25rem 2.5rem}
+      .hero h1{font-size:clamp(1.8rem,7vw,2.8rem)}
+      .hero-sub{font-size:.95rem}
+      .hero-btns{flex-direction:column;align-items:center}
+      .hero-btns .btn-primary,.hero-btns .btn-outline{width:100%;max-width:300px;text-align:center}
+      .stats-row{gap:1.5rem;padding:1.75rem 1rem}
+      .stat-num{font-size:1.5rem}
+      .section{padding:2.5rem 1.25rem}
+      .section-title{font-size:1.5rem}
+      .features-grid{grid-template-columns:1fr}
+      .blog-grid{grid-template-columns:1fr}
+      .profile-layout{grid-template-columns:1fr;padding:1.5rem 1rem}
+      .form-row{grid-template-columns:1fr}
+      .dashboard-header{padding:1.5rem 1rem}
+      .dashboard-header h1{font-size:1.4rem}
+      .dashboard-body{padding:1.25rem 1rem}
+      .ops-grid{grid-template-columns:1fr}
+      .pricing-page{padding:2rem 1rem}
+      .pricing-hero h1{font-size:1.75rem}
+      .pricing-grid{grid-template-columns:1fr}
+      .modal{padding:1.75rem 1.25rem}
+      .news-item{flex-direction:column;gap:.6rem}
+      .news-badge{align-self:flex-start}
+      .footer{padding:1.5rem 1rem;font-size:.75rem}
+    }
+    @media(max-width:480px){
+      .nav{padding:0 1rem}
+      .nav-logo{font-size:1.15rem}
+      .dash-controls{gap:.35rem}
+      .filter-btn{font-size:.72rem;padding:.35rem .7rem}
+    }
   `}</style>
 );
 
@@ -214,7 +264,8 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [authMsg, setAuthMsg] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [sessionLoading, setSessionLoading] = useState(true); // true until session check completes
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Restore session on mount
   // onAuthStateChange fires immediately with INITIAL_SESSION — the most reliable
@@ -338,6 +389,7 @@ export default function App() {
   // Persist active page so we can restore it after a refresh
   function navigateTo(p) {
     setPage(p);
+    setMenuOpen(false);
     if (typeof window !== 'undefined') {
       if (p === 'profile' || p === 'myops' || p === 'pricing') localStorage.setItem('lastPage', p);
       else localStorage.removeItem('lastPage');
@@ -358,7 +410,9 @@ export default function App() {
     <div className="app">
       <GlobalStyles />
       <nav className="nav">
-        <div className="nav-logo" onClick={() => setPage('home')}>Opport<span>unity</span></div>
+        <div className="nav-logo" onClick={() => { navigateTo('home'); }}>Opport<span>unity</span></div>
+
+        {/* ── Desktop nav ── */}
         <div className="nav-links">
           {navLinks.map(l => (
             <button key={l} className={`nav-link${page === l.toLowerCase() ? ' active' : ''}`} onClick={() => navigateTo(l.toLowerCase())}>{l}</button>
@@ -371,33 +425,55 @@ export default function App() {
               platinum: { label: '💎 Platinum', color: '#7dd3fc', bg: 'rgba(125,211,252,.12)', border: 'rgba(125,211,252,.35)' },
             }[plan] || { label: '🥈 Silver', color: '#9ca3af', bg: 'rgba(156,163,175,.12)', border: 'rgba(156,163,175,.3)' };
             return (
-              <button
-                onClick={() => navigateTo('pricing')}
-                title="View or upgrade your plan"
-                style={{
-                  background: cfg.bg,
-                  border: `1px solid ${cfg.border}`,
-                  color: cfg.color,
-                  borderRadius: '100px',
-                  padding: '.28rem .75rem',
-                  fontSize: '.72rem',
-                  fontWeight: 700,
-                  letterSpacing: '.04em',
-                  cursor: 'pointer',
-                  transition: 'all .2s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <button onClick={() => navigateTo('pricing')} title="View or upgrade your plan"
+                style={{background:cfg.bg,border:`1px solid ${cfg.border}`,color:cfg.color,borderRadius:'100px',padding:'.28rem .75rem',fontSize:'.72rem',fontWeight:700,letterSpacing:'.04em',cursor:'pointer',transition:'all .2s',whiteSpace:'nowrap'}}>
                 {cfg.label}
               </button>
             );
           })()}
           {user
-            ? <button className="nav-link" style={{ color: '#c9a84c' }} onClick={handleLogout}>Log out</button>
+            ? <button className="nav-link" style={{color:'#c9a84c'}} onClick={handleLogout}>Log out</button>
             : <button className="nav-cta" onClick={() => { setModal('signup'); setAuthMsg(null); }}>Sign Up</button>
           }
         </div>
+
+        {/* ── Hamburger button (mobile only) ── */}
+        <button className={`hamburger${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(o => !o)} aria-label="Menu">
+          <span/><span/><span/>
+        </button>
       </nav>
+
+      {/* ── Mobile drawer ── */}
+      {menuOpen && (
+        <div className={`mobile-nav${menuOpen ? ' open' : ''}`}>
+          {navLinks.map(l => (
+            <button key={l} className={`nav-link${page === l.toLowerCase() ? ' active' : ''}`} onClick={() => navigateTo(l.toLowerCase())}>{l}</button>
+          ))}
+          <div className="mobile-nav-divider"/>
+          {user && (() => {
+            const plan = user?.plan || 'silver';
+            const cfg = {
+              silver:   { label: '🥈 Silver Plan',   color: '#9ca3af', bg: 'rgba(156,163,175,.08)', border: 'rgba(156,163,175,.3)' },
+              gold:     { label: '🥇 Gold Plan',     color: '#c9a84c', bg: 'rgba(201,168,76,.08)',  border: 'rgba(201,168,76,.35)' },
+              platinum: { label: '💎 Platinum Plan', color: '#7dd3fc', bg: 'rgba(125,211,252,.08)', border: 'rgba(125,211,252,.35)' },
+            }[plan] || { label: '🥈 Silver Plan', color: '#9ca3af', bg: 'rgba(156,163,175,.08)', border: 'rgba(156,163,175,.3)' };
+            return (
+              <button className="plan-pill" onClick={() => navigateTo('pricing')}
+                style={{background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
+                {cfg.label} — Tap to upgrade
+              </button>
+            );
+          })()}
+          <div className="mobile-nav-divider"/>
+          {user
+            ? <button className="nav-link" style={{color:'#c9a84c'}} onClick={handleLogout}>Log out</button>
+            : <>
+                <button className="nav-link" onClick={() => { setModal('login'); setAuthMsg(null); setMenuOpen(false); }}>Log In</button>
+                <button className="nav-cta" onClick={() => { setModal('signup'); setAuthMsg(null); setMenuOpen(false); }}>Sign Up Free</button>
+              </>
+          }
+        </div>
+      )}
 
       <div className="page">
         {page === 'home' && <HomePage setPage={setPage} setModal={setModal} user={user} />}
