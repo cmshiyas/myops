@@ -275,6 +275,10 @@ export default function App() {
           interests: Array.isArray(p.interests) ? p.interests : [],
           languages: Array.isArray(p.languages) ? p.languages : [],
         });
+        // Store plan in user state so it flows to all pages
+        if (p.plan) {
+          setUser(prev => prev ? { ...prev, plan: p.plan } : prev);
+        }
       }
       if (opsData.opportunities?.length > 0) {
         setOpportunities(opsData.opportunities);
@@ -859,11 +863,57 @@ function PricingPage({ setModal, user, navigateTo }) {
     },
   ];
 
-  function handleCta(plan) {
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [stripeMsg, setStripeMsg] = useState(null);
+
+  // Show success/cancel message from Stripe redirect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('success') === 'true')  setStripeMsg({ type: 'success', text: '🎉 Payment successful! Your plan has been upgraded.' });
+      if (params.get('canceled') === 'true') setStripeMsg({ type: 'error',   text: 'Payment cancelled. You have not been charged.' });
+    }
+  }, []);
+
+  async function handleCta(plan) {
     if (!user) { setModal('signup'); return; }
-    // Payment integration placeholder — show alert for now
     if (plan.id === 'silver') { navigateTo('profile'); return; }
-    alert(`Payment integration coming soon!\n\nTo manually activate ${plan.name}, contact support.`);
+    setCheckoutLoading(plan.id);
+    setStripeMsg(null);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: plan.id, userId: user.id, userEmail: user.email }),
+      });
+      const data = await res.json();
+      if (data.error) { setStripeMsg({ type: 'error', text: data.error }); return; }
+      // Redirect to Stripe Checkout
+      window.location.href = data.url;
+    } catch (_) {
+      setStripeMsg({ type: 'error', text: 'Could not connect to payment service. Please try again.' });
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function handleManageBilling() {
+    if (!user) return;
+    setCheckoutLoading('portal');
+    try {
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      if (data.error) { setStripeMsg({ type: 'error', text: data.error }); return; }
+      window.location.href = data.url;
+    } catch (_) {
+      setStripeMsg({ type: 'error', text: 'Could not open billing portal.' });
+    } finally {
+      setCheckoutLoading(null);
+    }
   }
 
   const currentPlan = user?.plan || 'silver';
@@ -874,6 +924,28 @@ function PricingPage({ setModal, user, navigateTo }) {
         <h1>Simple, Transparent Pricing</h1>
         <p>Choose the plan that matches your ambition. Upgrade or downgrade anytime.</p>
       </div>
+      {stripeMsg && (
+        <div style={{
+          padding:'.9rem 1.2rem',borderRadius:'8px',marginBottom:'1.5rem',
+          background: stripeMsg.type==='success' ? 'rgba(45,90,61,.12)' : 'rgba(184,92,56,.12)',
+          border: `1px solid ${stripeMsg.type==='success' ? 'var(--forest)' : 'var(--rust)'}`,
+          color: stripeMsg.type==='success' ? 'var(--forest)' : 'var(--rust)',
+          fontSize:'.9rem', textAlign:'center'
+        }}>
+          {stripeMsg.text}
+        </div>
+      )}
+      {user && currentPlan !== 'silver' && (
+        <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
+          <button
+            onClick={handleManageBilling}
+            disabled={checkoutLoading==='portal'}
+            style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.5rem 1.2rem',fontSize:'.82rem',cursor:'pointer',color:'var(--muted)'}}
+          >
+            {checkoutLoading==='portal' ? 'Opening…' : '⚙️ Manage Billing & Cancel'}
+          </button>
+        </div>
+      )}
       <div className="pricing-grid">
         {plans.map(plan => (
           <div key={plan.id} className={`pricing-card${plan.featured?' featured':''}`}>
@@ -899,10 +971,10 @@ function PricingPage({ setModal, user, navigateTo }) {
             <button
               className={`plan-cta ${plan.ctaStyle}`}
               onClick={()=>handleCta(plan)}
-              disabled={currentPlan===plan.id}
-              style={currentPlan===plan.id?{opacity:.5,cursor:'not-allowed'}:{}}
+              disabled={currentPlan===plan.id||checkoutLoading===plan.id}
+              style={(currentPlan===plan.id||checkoutLoading===plan.id)?{opacity:.6,cursor:'not-allowed'}:{}}
             >
-              {currentPlan===plan.id ? 'Current Plan' : plan.cta}
+              {checkoutLoading===plan.id ? 'Redirecting…' : currentPlan===plan.id ? 'Current Plan' : plan.cta}
             </button>
           </div>
         ))}
