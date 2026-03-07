@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  );
+}
 
 // GET — load saved opportunities for a user
 export async function GET(req) {
@@ -11,7 +14,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     if (!userId) return Response.json({ error: 'userId required' }, { status: 400 });
-
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from('opportunities')
       .select('opportunities, generated_at')
@@ -39,7 +42,7 @@ export async function POST(req) {
     if (!userId || !opportunities) {
       return Response.json({ error: 'userId and opportunities required' }, { status: 400 });
     }
-
+    const supabase = getSupabase();
     const { error } = await supabase
       .from('opportunities')
       .upsert({

@@ -1,20 +1,22 @@
+import { createClient } from '@supabase/supabase-js';
+
 const MONTHLY_TOKEN_LIMIT = parseInt(process.env.TOKEN_LIMIT_PER_MONTH || '50000', 10);
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  );
+}
 
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
+    if (!userId) return Response.json({ error: 'userId required' }, { status: 400 });
 
-    if (!userId) {
-      return Response.json({ error: 'userId required' }, { status: 400 });
-    }
-
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
+    const supabase = getSupabase();
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 

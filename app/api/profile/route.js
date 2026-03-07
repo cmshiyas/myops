@@ -1,15 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Server-side routes must use the service role key to bypass RLS.
+// The anon key respects RLS and has no user JWT attached here, so writes fail.
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  );
+}
 
 export async function POST(req) {
   try {
     const { userId, profile } = await req.json();
     if (!userId) return Response.json({ error: 'Not authenticated' }, { status: 401 });
-
+    const supabase = getSupabase();
     const { error } = await supabase
       .from('profiles')
       .upsert({ user_id: userId, ...profile, updated_at: new Date().toISOString() });
@@ -26,7 +31,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     if (!userId) return Response.json({ error: 'Not authenticated' }, { status: 401 });
-
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
