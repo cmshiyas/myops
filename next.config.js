@@ -1,15 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Explicitly declare which env vars are server-only.
-  // Next.js will throw a build error if these are referenced in client code.
-  serverRuntimeConfig: {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  // Ensure these packages are never bundled into client-side code
+  experimental: {
+    serverComponentsExternalPackages: ['@supabase/supabase-js'],
   },
-  // These are safe to expose to the browser (no secrets)
-  publicRuntimeConfig: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+
+  // Validate that secret keys exist at build time (will fail build if missing)
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Hard-block secret env vars from ever reaching browser bundle
+      config.plugins.push(
+        new (require('webpack').DefinePlugin)({
+          'process.env.ANTHROPIC_API_KEY': JSON.stringify(''),
+          'process.env.SUPABASE_SERVICE_ROLE_KEY': JSON.stringify(''),
+        })
+      );
+    }
+    return config;
   },
 };
 

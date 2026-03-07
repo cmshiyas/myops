@@ -1,3 +1,5 @@
+'use server';
+import 'server-only'; // Hard error if this file is ever imported client-side
 import { createClient } from '@supabase/supabase-js';
 
 const MONTHLY_TOKEN_LIMIT = parseInt(process.env.TOKEN_LIMIT_PER_MONTH || '50000', 10);
