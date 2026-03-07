@@ -972,6 +972,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
   const filters = ['All','Job','Education','Migration'];
   const plan = PLAN_LIMITS[userPlan] || PLAN_LIMITS.silver;
   const [usage, setUsage] = useState(null);
+  const [rerunError, setRerunError] = useState(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -980,7 +981,41 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         .then(d => { if (!d.error) setUsage(d); })
         .catch(() => {});
     }
-  }, [user?.id]);
+  }, [user?.id, loadingOps]); // refresh usage after a rerun too
+
+  async function handleRerun() {
+    if (!profile || loadingOps) return;
+    setRerunError(null);
+    setLoadingOps(true);
+    setOpportunities([]);
+    const profileSummary = `Location: ${profile.city}, ${profile.country}\nAge: ${profile.age}\nEducation: ${profile.education} in ${profile.field}\nExperience: ${profile.experience} years\nSkills: ${(profile.skills||[]).join(', ')}\nInterests: ${(profile.interests||[]).join(', ')}\nLanguages: ${(profile.languages||[]).join(', ')}\nBio: ${profile.bio}`;
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileSummary, userId: user.id }),
+      });
+      const data = await res.json();
+      if (data.error === 'limit_reached') {
+        setRerunError(data.message || 'Monthly token limit reached. Upgrade your plan for more analyses.');
+        setOpportunities([]);
+        return;
+      }
+      if (data.error) { setRerunError(data.error); return; }
+      const ops = data.opportunities || [];
+      setOpportunities(ops);
+      // Persist updated results
+      fetch('/api/opportunities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, opportunities: ops }),
+      }).catch(() => {});
+    } catch(_) {
+      setRerunError('Something went wrong. Please try again.');
+    } finally {
+      setLoadingOps(false);
+    }
+  }
 
   // Apply plan limit — silver sees only 1 op per category
   const allFiltered = dashFilter==='All' ? opportunities : opportunities.filter(o=>o.type?.toLowerCase()===dashFilter.toLowerCase());
@@ -1019,9 +1054,39 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         </div>
       </div>
       {loadingOps&&<div className="loading-banner"><div className="spinner"/>Claude is analysing your profile and searching the world for opportunities…</div>}
+      {rerunError && (
+        <div style={{background:'rgba(184,92,56,.08)',borderBottom:'1px solid rgba(184,92,56,.2)',padding:'.9rem 2rem',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
+          <span style={{fontSize:'.85rem',color:'var(--rust)'}}>{rerunError}</span>
+          {rerunError.includes('limit') && <button className="btn-primary" style={{padding:'.45rem 1rem',fontSize:'.8rem'}} onClick={()=>setPage('pricing')}>Upgrade Plan →</button>}
+        </div>
+      )}
       <div className="dashboard-body">
         <div className="dash-controls">
           {filters.map(f=><button key={f} className={`filter-btn${dashFilter===f?' active':''}`} onClick={()=>setDashFilter(f)}>{f}</button>)}
+          {/* Rerun button — only shown for Gold/Platinum */}
+          {plan.canRerun && (
+            <button
+              className="analyze-btn"
+              onClick={handleRerun}
+              disabled={loadingOps || !profile}
+              title={!profile ? 'Complete your profile first' : 'Find fresh opportunities'}
+            >
+              {loadingOps
+                ? <><div className="spinner" style={{width:14,height:14,borderWidth:2}}/>Analysing…</>
+                : <>✦ Refresh Opportunities</>
+              }
+            </button>
+          )}
+          {/* Silver users see an upgrade nudge instead */}
+          {!plan.canRerun && opportunities.length > 0 && (
+            <button
+              className="analyze-btn"
+              onClick={()=>setPage('pricing')}
+              style={{background:'rgba(201,168,76,.15)',color:'var(--gold)',border:'1px solid rgba(201,168,76,.3)'}}
+            >
+              🔒 Upgrade to Rerun
+            </button>
+          )}
         </div>
         {!loadingOps&&allFiltered.length===0&&(
           <div className="empty-dash">
