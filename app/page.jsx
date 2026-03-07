@@ -196,17 +196,24 @@ export default function App() {
 
   async function loadProfile(userId) {
     try {
-      const res = await fetch(`/api/profile?userId=${userId}`);
-      const data = await res.json();
-      if (data.profile) {
-        // Ensure array fields are always arrays, never null
-        const p = data.profile;
+      // Load profile and saved opportunities in parallel
+      const [profileRes, opsRes] = await Promise.all([
+        fetch(`/api/profile?userId=${userId}`),
+        fetch(`/api/opportunities?userId=${userId}`),
+      ]);
+      const [profileData, opsData] = await Promise.all([profileRes.json(), opsRes.json()]);
+
+      if (profileData.profile) {
+        const p = profileData.profile;
         setProfile({
           ...p,
           skills:    Array.isArray(p.skills)    ? p.skills    : [],
           interests: Array.isArray(p.interests) ? p.interests : [],
           languages: Array.isArray(p.languages) ? p.languages : [],
         });
+      }
+      if (opsData.opportunities?.length > 0) {
+        setOpportunities(opsData.opportunities);
       }
     } catch (_) {}
   }
@@ -262,7 +269,7 @@ export default function App() {
         {page === 'blog' && <BlogPage />}
         {page === 'news' && <NewsPage />}
         {page === 'profile' && user && <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={setPage} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} />}
-        {page === 'myops' && user && <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={setPage} />}
+        {page === 'myops' && user && <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={setPage} user={user} />}
       </div>
 
       <footer className="footer">© 2026 <span>OpportunityFinder</span> — Powered by Claude AI · Connecting talent to the world</footer>
@@ -407,6 +414,17 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState(null);
+  const [limitError, setLimitError] = useState(null);
+  const [usage, setUsage] = useState(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`/api/usage?userId=${user.id}`)
+        .then(r => r.json())
+        .then(d => { if (!d.error) setUsage(d); })
+        .catch(() => {});
+    }
+  }, [user?.id]);
 
   // Sync form when profile loads from DB after component already mounted (e.g. after re-login)
   useEffect(() => {
@@ -441,9 +459,22 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
     setOpportunities([]);
     const profileSummary = `Location: ${form.city}, ${form.country}\nAge: ${form.age}\nEducation: ${form.education} in ${form.field}\nExperience: ${form.experience} years\nSkills: ${form.skills.join(', ')}\nInterests: ${form.interests.join(', ')}\nLanguages: ${form.languages.join(', ')}\nBio: ${form.bio}`;
     try {
-      const res = await fetch('/api/analyze', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ profileSummary }) });
+      const res = await fetch('/api/analyze', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ profileSummary, userId: user.id }) });
       const data = await res.json();
-      setOpportunities(data.opportunities || FALLBACK_OPS);
+      if (data.error === 'limit_reached') {
+        setOpportunities([]);
+        setLimitError(data.message);
+        return;
+      }
+      setLimitError(null);
+      const ops = data.opportunities || FALLBACK_OPS;
+      setOpportunities(ops);
+      // Persist to DB so they survive re-login
+      fetch('/api/opportunities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, opportunities: ops }),
+      }).catch(() => {});
     } catch(_) { setOpportunities(FALLBACK_OPS); }
     finally { setLoadingOps(false); }
   }
@@ -459,13 +490,39 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
             <div className="progress-label"><span>Profile Completeness</span><span style={{fontWeight:700}}>{pct}%</span></div>
             <div className="progress-bar"><div className="progress-fill" style={{width:`${pct}%`}}/></div>
           </div>
-          {pct>=50&&<button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem'}} onClick={handleAnalyze}>✦ Analyse & Find Opportunities</button>}
+          {usage && (
+            <div style={{marginTop:'1.25rem'}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'.75rem',marginBottom:'.3rem'}}>
+                <span>AI Tokens Used</span>
+                <span style={{fontWeight:700,color: usage.percentUsed >= 90 ? 'var(--rust)' : usage.percentUsed >= 70 ? '#b07a20' : 'var(--ink)'}}>
+                  {usage.tokensUsed.toLocaleString()} / {usage.tokenLimit.toLocaleString()}
+                </span>
+              </div>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{
+                  width:`${usage.percentUsed}%`,
+                  background: usage.percentUsed >= 90 ? 'var(--rust)' : usage.percentUsed >= 70 ? '#c9893c' : 'var(--gold)'
+                }}/>
+              </div>
+              <div style={{fontSize:'.7rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>
+                Resets {usage.resetDate}
+              </div>
+            </div>
+          )}
+          {limitError && (
+            <div className="alert alert-error" style={{marginTop:'1rem',fontSize:'.78rem',textAlign:'left'}}>
+              🚫 {limitError}
+            </div>
+          )}
+          {!limitError && pct>=50&&<button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem'}} onClick={handleAnalyze}>✦ Analyse & Find Opportunities</button>}
+          {limitError && <button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem',opacity:.5,cursor:'not-allowed'}} disabled>Limit Reached</button>}
         </div>
       </div>
       <div className="profile-form">
         <h2>Your Profile</h2>
         {saved&&<div className="alert alert-success">Profile saved successfully!</div>}
         {saveErr&&<div className="alert alert-error">{saveErr}</div>}
+        {limitError&&<div className="alert alert-error">🚫 {limitError}</div>}
         <div className="form-row">
           <div className="form-group"><label>Country</label><input placeholder="e.g. Nigeria" value={form.country} onChange={e=>setForm(f=>({...f,country:e.target.value}))}/></div>
           <div className="form-group"><label>City</label><input placeholder="e.g. Lagos" value={form.city} onChange={e=>setForm(f=>({...f,city:e.target.value}))}/></div>
@@ -503,15 +560,53 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage }) {
+function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user }) {
   const filters = ['All','Job','Education','Migration'];
   const displayed = dashFilter==='All' ? opportunities : opportunities.filter(o=>o.type?.toLowerCase()===dashFilter.toLowerCase());
+  const [usage, setUsage] = useState(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`/api/usage?userId=${user.id}`)
+        .then(r => r.json())
+        .then(d => { if (!d.error) setUsage(d); })
+        .catch(() => {});
+    }
+  }, [user?.id]);
 
   return (
     <>
       <div className="dashboard-header">
-        <h1>✦ MyOps Dashboard</h1>
-        <p>Your personalised global opportunities, curated by Claude AI</p>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1.5rem'}}>
+          <div>
+            <h1>✦ MyOps Dashboard</h1>
+            <p>Your personalised global opportunities, curated by Claude AI</p>
+          </div>
+          {usage && (
+            <div style={{minWidth:'220px',maxWidth:'300px',flex:'0 0 auto'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'.35rem'}}>
+                <span style={{fontSize:'.72rem',letterSpacing:'.08em',textTransform:'uppercase',color:'var(--muted)'}}>AI Tokens</span>
+                <span style={{
+                  fontSize:'.82rem',fontWeight:700,
+                  color: usage.percentUsed>=90 ? 'var(--rust)' : usage.percentUsed>=70 ? '#c9893c' : 'var(--gold)'
+                }}>
+                  {usage.tokensUsed.toLocaleString()} <span style={{fontWeight:400,color:'var(--muted)'}}>/ {usage.tokenLimit.toLocaleString()}</span>
+                </span>
+              </div>
+              <div style={{height:'6px',background:'rgba(255,255,255,0.1)',borderRadius:'3px',overflow:'hidden'}}>
+                <div style={{
+                  height:'100%',borderRadius:'3px',
+                  width:`${usage.percentUsed}%`,
+                  background: usage.percentUsed>=90 ? 'var(--rust)' : usage.percentUsed>=70 ? '#c9893c' : 'var(--gold)',
+                  transition:'width .5s'
+                }}/>
+              </div>
+              <div style={{fontSize:'.68rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>
+                Resets {usage.resetDate}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       {loadingOps&&<div className="loading-banner"><div className="spinner"/>Claude is analysing your profile and searching the world for opportunities…</div>}
       <div className="dashboard-body">
