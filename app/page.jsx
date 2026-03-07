@@ -870,8 +870,22 @@ function PricingPage({ setModal, user, navigateTo }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('success') === 'true')  setStripeMsg({ type: 'success', text: '🎉 Payment successful! Your plan has been upgraded.' });
-      if (params.get('canceled') === 'true') setStripeMsg({ type: 'error',   text: 'Payment cancelled. You have not been charged.' });
+      const stripeResult = params.get('stripe');
+      if (stripeResult === 'success') {
+        setStripeMsg({ type: 'success', text: '🎉 Payment successful! Your plan has been upgraded.' });
+        // Clean the URL and navigate to pricing page
+        window.history.replaceState({}, '', '/');
+        navigateTo('pricing');
+      }
+      if (stripeResult === 'canceled') {
+        setStripeMsg({ type: 'error', text: 'Payment cancelled. You have not been charged.' });
+        window.history.replaceState({}, '', '/');
+        navigateTo('pricing');
+      }
+      if (stripeResult === 'portal') {
+        window.history.replaceState({}, '', '/');
+        navigateTo('pricing');
+      }
     }
   }, []);
 

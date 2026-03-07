@@ -56,8 +56,8 @@ export async function POST(req) {
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: PRICE_IDS[plan], quantity: 1 }],
-      success_url: `${appUrl}/pricing?success=true`,
-      cancel_url:  `${appUrl}/pricing?canceled=true`,
+      success_url: `${appUrl}/?stripe=success`,
+      cancel_url:  `${appUrl}/?stripe=canceled`,
       metadata: { supabase_user_id: userId, plan },
       subscription_data: {
         metadata: { supabase_user_id: userId, plan },
