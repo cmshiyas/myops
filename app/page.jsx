@@ -266,6 +266,30 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [billingDropdown, setBillingDropdown] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [subscriptionModal, setSubscriptionModal] = useState(null); // null | 'manage' | 'cancel' | 'downgrade'
+  const [downgradeTarget, setDowngradeTarget] = useState(null);
+  const [downgradeLoading, setDowngradeLoading] = useState(false);
+
+  async function handleManageBillingNav() {
+    setBillingLoading(true);
+    setBillingDropdown(false);
+    try {
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      window.location.href = data.url;
+    } catch (_) {
+      alert('Could not open billing portal. Please try again.');
+    } finally {
+      setBillingLoading(false);
+    }
+  }
 
   // Restore session on mount
   // onAuthStateChange fires immediately with INITIAL_SESSION — the most reliable
@@ -400,7 +424,7 @@ export default function App() {
     return (
       <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--ink)',flexDirection:'column',gap:'1rem'}}>
         <GlobalStyles />
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:'1.6rem',fontWeight:900,color:'var(--gold)'}}>Opport<span style={{color:'var(--paper)'}}>unity</span></div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:'1.6rem',fontWeight:900,color:'var(--gold)'}}>Code<span style={{color:'var(--paper)'}}>labs</span></div>
         <div style={{width:32,height:32,border:'3px solid rgba(201,168,76,.3)',borderTopColor:'var(--gold)',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
       </div>
     );
@@ -410,7 +434,7 @@ export default function App() {
     <div className="app">
       <GlobalStyles />
       <nav className="nav">
-        <div className="nav-logo" onClick={() => { navigateTo('home'); }}>Opport<span>unity</span></div>
+        <div className="nav-logo" onClick={() => { navigateTo('home'); }}>Code<span>labs</span></div>
 
         {/* ── Desktop nav ── */}
         <div className="nav-links">
@@ -425,10 +449,82 @@ export default function App() {
               platinum: { label: '💎 Platinum', color: '#7dd3fc', bg: 'rgba(125,211,252,.12)', border: 'rgba(125,211,252,.35)' },
             }[plan] || { label: '🥈 Silver', color: '#9ca3af', bg: 'rgba(156,163,175,.12)', border: 'rgba(156,163,175,.3)' };
             return (
-              <button onClick={() => navigateTo('pricing')} title="View or upgrade your plan"
-                style={{background:cfg.bg,border:`1px solid ${cfg.border}`,color:cfg.color,borderRadius:'100px',padding:'.28rem .75rem',fontSize:'.72rem',fontWeight:700,letterSpacing:'.04em',cursor:'pointer',transition:'all .2s',whiteSpace:'nowrap'}}>
-                {cfg.label}
-              </button>
+              <div style={{position:'relative'}}>
+                <button
+                  onClick={() => setBillingDropdown(o => !o)}
+                  title="Manage your subscription"
+                  style={{background:cfg.bg,border:`1px solid ${cfg.border}`,color:cfg.color,borderRadius:'100px',padding:'.28rem .75rem',fontSize:'.72rem',fontWeight:700,letterSpacing:'.04em',cursor:'pointer',transition:'all .2s',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:'.3rem'}}>
+                  {billingLoading ? '…' : cfg.label}
+                  <span style={{fontSize:'.6rem',opacity:.7}}>{billingDropdown ? '▲' : '▼'}</span>
+                </button>
+                {billingDropdown && (
+                  <>
+                    {/* Click-outside overlay */}
+                    <div onClick={() => setBillingDropdown(false)} style={{position:'fixed',inset:0,zIndex:998}}/>
+                    <div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'#1a1a1a',border:'1px solid rgba(201,168,76,.25)',borderRadius:'12px',padding:'.4rem',minWidth:'230px',zIndex:999,boxShadow:'0 16px 48px rgba(0,0,0,.5)',animation:'fadeIn .15s ease'}}>
+                      {/* Header */}
+                      <div style={{padding:'.6rem .8rem .65rem',borderBottom:'1px solid rgba(255,255,255,.07)',marginBottom:'.35rem'}}>
+                        <div style={{fontSize:'.65rem',color:'rgba(255,255,255,.38)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'.2rem'}}>Current plan</div>
+                        <div style={{fontSize:'.95rem',fontWeight:700,color:cfg.color}}>{cfg.label}</div>
+                      </div>
+
+                      {/* Upgrade — only if not platinum */}
+                      {plan !== 'platinum' && (
+                        <button onClick={() => { setBillingDropdown(false); navigateTo('pricing'); }}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',color:'var(--gold)',padding:'.6rem .8rem',borderRadius:'7px',fontSize:'.84rem',cursor:'pointer',fontWeight:600,display:'flex',alignItems:'center',gap:'.55rem'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(201,168,76,.1)'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          ⬆️ Upgrade Plan
+                        </button>
+                      )}
+
+                      {/* Downgrade — only for platinum */}
+                      {plan === 'platinum' && (
+                        <button onClick={() => { setBillingDropdown(false); setDowngradeTarget('gold'); setSubscriptionModal('downgrade'); }}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',color:'rgba(255,255,255,.8)',padding:'.6rem .8rem',borderRadius:'7px',fontSize:'.84rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'.55rem'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.06)'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          ⬇️ Downgrade to Gold
+                        </button>
+                      )}
+
+                      {/* Manage billing */}
+                      {plan !== 'silver' && (
+                        <button onClick={() => { setBillingDropdown(false); handleManageBillingNav(); }}
+                          disabled={billingLoading}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',color:'rgba(255,255,255,.75)',padding:'.6rem .8rem',borderRadius:'7px',fontSize:'.84rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'.55rem'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.06)'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          💳 Manage Billing
+                        </button>
+                      )}
+
+                      {/* Divider before destructive actions */}
+                      {plan !== 'silver' && <div style={{height:'1px',background:'rgba(255,255,255,.06)',margin:'.3rem 0'}}/>}
+
+                      {/* Cancel */}
+                      {plan !== 'silver' && (
+                        <button onClick={() => { setBillingDropdown(false); setSubscriptionModal('cancel'); }}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',color:'#f87171',padding:'.6rem .8rem',borderRadius:'7px',fontSize:'.84rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'.55rem'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(248,113,113,.08)'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          ✕ Cancel Subscription
+                        </button>
+                      )}
+
+                      {/* Silver free plan */}
+                      {plan === 'silver' && (
+                        <button onClick={() => { setBillingDropdown(false); navigateTo('pricing'); }}
+                          style={{width:'100%',textAlign:'left',background:'none',border:'none',color:'rgba(255,255,255,.7)',padding:'.6rem .8rem',borderRadius:'7px',fontSize:'.84rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'.55rem'}}
+                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.06)'}
+                          onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                          🔍 View All Plans
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             );
           })()}
           {user
@@ -458,10 +554,20 @@ export default function App() {
               platinum: { label: '💎 Platinum Plan', color: '#7dd3fc', bg: 'rgba(125,211,252,.08)', border: 'rgba(125,211,252,.35)' },
             }[plan] || { label: '🥈 Silver Plan', color: '#9ca3af', bg: 'rgba(156,163,175,.08)', border: 'rgba(156,163,175,.3)' };
             return (
-              <button className="plan-pill" onClick={() => navigateTo('pricing')}
-                style={{background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
-                {cfg.label} — Tap to upgrade
-              </button>
+              <div style={{display:'flex',flexDirection:'column',gap:'.35rem'}}>
+                <div style={{fontSize:'.7rem',color:'rgba(255,255,255,.4)',letterSpacing:'.08em',textTransform:'uppercase',paddingLeft:'.25rem'}}>Your Plan</div>
+                <button className="plan-pill" onClick={() => { navigateTo('pricing'); }}
+                  style={{background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>
+                  {cfg.label} {plan !== 'platinum' ? '— Tap to upgrade' : '— Active'}
+                </button>
+                {plan !== 'silver' && (
+                  <button className="plan-pill"
+                    onClick={() => { setMenuOpen(false); handleManageBillingNav(); }}
+                    style={{background:'rgba(248,113,113,.08)',color:'#f87171',border:'1px solid rgba(248,113,113,.2)'}}>
+                    {billingLoading ? 'Opening…' : '✕ Cancel / Manage Billing'}
+                  </button>
+                )}
+              </div>
             );
           })()}
           <div className="mobile-nav-divider"/>
@@ -490,13 +596,32 @@ export default function App() {
         )}
       </div>
 
-      <footer className="footer">© 2026 <span>OpportunityFinder</span> — Powered by Claude AI · Connecting talent to the world</footer>
+      <footer className="footer">© 2026 <span>Codelabs Pvt Ltd</span> · Powered by AI · Connecting talent to the world</footer>
 
-      {modal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal">
-            <button className="modal-close" onClick={() => setModal(null)}>×</button>
-            <h2>{modal === 'signup' ? 'Create Account' : 'Welcome Back'}</h2>
+      {/* ── Cancel Subscription Modal ── */}
+      {subscriptionModal === 'cancel' && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSubscriptionModal(null)}>
+          <div className="modal" style={{maxWidth:400}}>
+            <button className="modal-close" onClick={() => setSubscriptionModal(null)}>✕</button>
+            <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
+              <div style={{fontSize:'2.5rem',marginBottom:'.75rem'}}>😔</div>
+              <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:'1.4rem',marginBottom:'.5rem'}}>Cancel Subscription?</h2>
+              <p style={{fontSize:'.88rem',color:'var(--muted)',lineHeight:1.6}}>
+                Your plan stays active until the end of your billing period. After that you'll drop to the free Silver plan.
+              </p>
+            </div>
+            <div style={{background:'var(--paper)',border:'1px solid var(--border)',borderRadius:'8px',padding:'1rem',marginBottom:'1.5rem',display:'flex',flexDirection:'column',gap:'.45rem'}}>
+              {['Re-analyse will be disabled','Only 1 opportunity visible','Token allowance removed'].map(item => (
+                <div key={item} style={{display:'flex',alignItems:'center',gap:'.5rem',fontSize:'.83rem',color:'var(--muted)'}}>
+                  <span style={{color:'var(--rust)'}}>✕</span> {item}
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'.6rem'}}>
+              <button
+                onClick={() => { setSubscriptionModal(null); handleManageBillingNav(); }}
+                disabled={billingLoading}
+                style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:'8px',padding:'.8rem',fontWeight:700,fontSize:'.9rem',cursor:'pointer',opacity:billingLoading?.6:
             <p className="modal-sub">{modal === 'signup' ? 'Join thousands discovering global opportunities.' : 'Sign in to access your dashboard.'}</p>
             {authMsg && <div className={`alert alert-${authMsg.type}`}>{authMsg.text}</div>}
             {modal === 'signup' && (
@@ -534,7 +659,7 @@ function HomePage({ setPage, setModal, user }) {
   return (
     <>
       <div className="hero">
-        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery</p>
+        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery by Codelabs</p>
         <h1>Your Skills Deserve a <em>World-Class</em> Stage</h1>
         <p className="hero-sub">Create your profile. Let our AI study it. Discover jobs, scholarships, and migration pathways tailored exactly to you — worldwide.</p>
         <div className="hero-btns">
@@ -619,7 +744,7 @@ function BlogPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
-          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Claude AI.</p>
+          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Codelabs AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
@@ -729,7 +854,7 @@ function NewsPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News</h2>
-          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Claude AI.</p>
+          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Codelabs AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
@@ -1028,7 +1153,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1.5rem'}}>
           <div>
             <h1>✦ MyOps Dashboard</h1>
-            <p>Your personalised global opportunities, curated by Claude AI</p>
+            <p>Your personalised global opportunities, curated by Codelabs AI</p>
           </div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'.6rem'}}>
             <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
@@ -1346,11 +1471,6 @@ function PricingPage({ setModal, user, navigateTo }) {
             </button>
           </div>
         ))}
-      </div>
-      <div style={{textAlign:'center',marginTop:'3rem',padding:'2rem',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',maxWidth:'600px',margin:'3rem auto 0'}}>
-        <p style={{fontFamily:"'Playfair Display',serif",fontSize:'1.1rem',marginBottom:'.5rem'}}>Need a custom plan for your organisation?</p>
-        <p style={{fontSize:'.85rem',color:'var(--muted)',marginBottom:'1rem'}}>We offer team plans with shared token pools and admin dashboards.</p>
-        <button className="btn-outline" style={{color:'var(--ink)',borderColor:'var(--border)'}} onClick={()=>alert('Contact us at hello@myops.app')}>Contact Sales →</button>
       </div>
     </div>
   );

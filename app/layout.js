@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'OpportunityFinder — AI-Powered Global Opportunities',
-  description: 'Discover jobs, scholarships and migration pathways tailored to your profile by Claude AI.',
+  title: 'Codelabs — AI-Powered Global Opportunities',
+  description: 'Discover jobs, scholarships and migration pathways tailored to your profile. Powered by Codelabs Pvt Ltd.',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
