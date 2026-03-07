@@ -183,15 +183,32 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [authMsg, setAuthMsg] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true); // true until session check completes
 
-  // Restore session on mount
+  // Restore session on mount — keep UI blocked until we know auth state
   useEffect(() => {
+    // Check for existing session (survives page refresh)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        setUser({ id: session.user.id, name: session.user.user_metadata?.full_name || session.user.email.split('@')[0], email: session.user.email });
-        loadProfile(session.user.id);
+        const u = session.user;
+        const restoredUser = { id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email };
+        setUser(restoredUser);
+        loadProfile(u.id);
+        // Restore last page the user was on (profile or myops)
+        const savedPage = typeof window !== 'undefined' ? localStorage.getItem('lastPage') : null;
+        if (savedPage === 'profile' || savedPage === 'myops') setPage(savedPage);
+      }
+      setSessionLoading(false); // unblock UI regardless of outcome
+    });
+
+    // Keep session in sync if user signs in/out in another tab
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null); setProfile(null); setOpportunities([]); setPage('home');
+        if (typeof window !== 'undefined') localStorage.removeItem('lastPage');
       }
     });
+    return () => subscription.unsubscribe();
   }, []);
 
   async function loadProfile(userId) {
@@ -232,7 +249,7 @@ export default function App() {
       const u = data.user;
       setUser({ id: u.id, name: u.user_metadata?.full_name || authForm.name || authForm.email.split('@')[0], email: u.email });
       setModal(null);
-      setPage('profile');
+      navigateTo('profile');
       if (u.id) loadProfile(u.id);
     } catch (_) {
       setAuthMsg({ type: 'error', text: 'Something went wrong. Please try again.' });
@@ -248,6 +265,25 @@ export default function App() {
 
   const navLinks = ['Home', 'Blog', 'News', ...(user ? ['Profile', 'MyOps'] : [])];
 
+  // Persist active page so we can restore it after a refresh
+  function navigateTo(p) {
+    setPage(p);
+    if (typeof window !== 'undefined') {
+      if (p === 'profile' || p === 'myops') localStorage.setItem('lastPage', p);
+      else localStorage.removeItem('lastPage');
+    }
+  }
+
+  if (sessionLoading) {
+    return (
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--ink)',flexDirection:'column',gap:'1rem'}}>
+        <GlobalStyles />
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:'1.6rem',fontWeight:900,color:'var(--gold)'}}>Opport<span style={{color:'var(--paper)'}}>unity</span></div>
+        <div style={{width:32,height:32,border:'3px solid rgba(201,168,76,.3)',borderTopColor:'var(--gold)',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <GlobalStyles />
@@ -255,7 +291,7 @@ export default function App() {
         <div className="nav-logo" onClick={() => setPage('home')}>Opport<span>unity</span></div>
         <div className="nav-links">
           {navLinks.map(l => (
-            <button key={l} className={`nav-link${page === l.toLowerCase() ? ' active' : ''}`} onClick={() => setPage(l.toLowerCase())}>{l}</button>
+            <button key={l} className={`nav-link${page === l.toLowerCase() ? ' active' : ''}`} onClick={() => navigateTo(l.toLowerCase())}>{l}</button>
           ))}
           {user
             ? <button className="nav-link" style={{ color: '#c9a84c' }} onClick={handleLogout}>Log out</button>
