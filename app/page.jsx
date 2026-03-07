@@ -139,6 +139,36 @@ const GlobalStyles = () => (
     .alert-error{background:#fde8e8;color:var(--rust);border:1px solid #f0b8b8}
     .footer{background:var(--ink);color:var(--muted);text-align:center;padding:2rem;font-size:.8rem;border-top:1px solid #222;margin-top:auto}
     .footer span{color:var(--gold)}
+    .pricing-page{padding:4rem 2rem;max-width:1100px;margin:0 auto}
+    .pricing-hero{text-align:center;margin-bottom:3rem}
+    .pricing-hero h1{font-family:'Playfair Display',serif;font-size:2.5rem;font-weight:900;margin-bottom:.75rem}
+    .pricing-hero p{color:var(--muted);font-size:1rem;max-width:480px;margin:0 auto}
+    .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;align-items:start}
+    .pricing-card{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:2rem;position:relative;transition:box-shadow .2s,transform .2s}
+    .pricing-card:hover{box-shadow:0 12px 40px var(--shadow);transform:translateY(-3px)}
+    .pricing-card.featured{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 12px 40px rgba(201,168,76,.15)}
+    .pricing-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--ink);font-size:.7rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:.3rem 1rem;border-radius:100px;white-space:nowrap}
+    .plan-icon{font-size:2.25rem;margin-bottom:.75rem}
+    .plan-name{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700;margin-bottom:.25rem}
+    .plan-price{font-size:2.5rem;font-weight:900;font-family:'Playfair Display',serif;line-height:1;margin:.75rem 0 .25rem}
+    .plan-price span{font-size:.9rem;font-weight:400;color:var(--muted);font-family:'DM Sans',sans-serif}
+    .plan-desc{font-size:.85rem;color:var(--muted);margin-bottom:1.5rem;line-height:1.5;min-height:48px}
+    .plan-features{list-style:none;margin-bottom:2rem;display:flex;flex-direction:column;gap:.6rem}
+    .plan-features li{font-size:.85rem;display:flex;align-items:flex-start;gap:.5rem;line-height:1.4}
+    .plan-features li .check{color:var(--forest);font-size:1rem;flex-shrink:0;margin-top:1px}
+    .plan-features li .cross{color:var(--muted);font-size:1rem;flex-shrink:0;margin-top:1px;opacity:.5}
+    .plan-features li.dimmed{opacity:.45}
+    .plan-cta{width:100%;padding:.8rem;border-radius:8px;font-weight:700;font-size:.88rem;letter-spacing:.04em;cursor:pointer;transition:all .2s;border:none}
+    .plan-cta.primary{background:var(--gold);color:var(--ink)}
+    .plan-cta.primary:hover{background:var(--gold-light)}
+    .plan-cta.outline{background:transparent;color:var(--ink);border:1.5px solid var(--border)}
+    .plan-cta.outline:hover{border-color:var(--ink);background:var(--paper)}
+    .plan-cta.dark{background:var(--ink);color:var(--gold)}
+    .plan-cta.dark:hover{background:#1a1a1a}
+    .current-plan-badge{display:inline-block;background:var(--forest);color:#fff;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:.2rem .55rem;border-radius:100px;margin-left:.5rem;vertical-align:middle}
+    .plan-divider{height:1px;background:var(--border);margin:1.25rem 0}
+    .locked-tile{position:relative;overflow:hidden}
+    .locked-tile::after{content:'🔒 Upgrade to unlock';position:absolute;inset:0;background:rgba(245,240,232,.92);display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:600;color:var(--muted);letter-spacing:.04em;backdrop-filter:blur(2px)}
   `}</style>
 );
 
@@ -298,13 +328,13 @@ export default function App() {
     try { localStorage.removeItem('lastPage'); } catch (_) {}
   }
 
-  const navLinks = ['Home', 'Blog', 'News', ...(user ? ['Profile', 'MyOps'] : [])];
+  const navLinks = ['Home', 'Blog', 'News', 'Pricing', ...(user ? ['Profile', 'MyOps'] : [])];
 
   // Persist active page so we can restore it after a refresh
   function navigateTo(p) {
     setPage(p);
     if (typeof window !== 'undefined') {
-      if (p === 'profile' || p === 'myops') localStorage.setItem('lastPage', p);
+      if (p === 'profile' || p === 'myops' || p === 'pricing') localStorage.setItem('lastPage', p);
       else localStorage.removeItem('lastPage');
     }
   }
@@ -338,13 +368,14 @@ export default function App() {
       <div className="page">
         {page === 'home' && <HomePage setPage={setPage} setModal={setModal} user={user} />}
         {page === 'blog' && <BlogPage />}
+        {page === 'pricing' && <PricingPage setModal={setModal} user={user} navigateTo={navigateTo} />}
         {page === 'news' && <NewsPage />}
         {page === 'profile' && (user
-          ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} />
+          ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} userPlan={user?.plan || 'silver'} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
         )}
         {page === 'myops' && (user
-          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} />
+          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} userPlan={user?.plan || 'silver'} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your opportunities.</p></div>
         )}
       </div>
@@ -636,10 +667,17 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
   );
 }
 
+// Plan limits config
+const PLAN_LIMITS = {
+  silver:   { maxOps: 1,  canRerun: false, tokenLimit: 0,    label: 'Silver',   color: '#9ca3af' },
+  gold:     { maxOps: null, canRerun: true, tokenLimit: 2000, label: 'Gold',     color: '#c9a84c' },
+  platinum: { maxOps: null, canRerun: true, tokenLimit: 20000,label: 'Platinum', color: '#7dd3fc' },
+};
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user }) {
+function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user, userPlan }) {
   const filters = ['All','Job','Education','Migration'];
-  const displayed = dashFilter==='All' ? opportunities : opportunities.filter(o=>o.type?.toLowerCase()===dashFilter.toLowerCase());
+  const plan = PLAN_LIMITS[userPlan] || PLAN_LIMITS.silver;
   const [usage, setUsage] = useState(null);
 
   useEffect(() => {
@@ -651,6 +689,11 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
     }
   }, [user?.id]);
 
+  // Apply plan limit — silver sees only 1 op per category
+  const allFiltered = dashFilter==='All' ? opportunities : opportunities.filter(o=>o.type?.toLowerCase()===dashFilter.toLowerCase());
+  const visibleOps = plan.maxOps ? allFiltered.slice(0, plan.maxOps) : allFiltered;
+  const lockedOps  = plan.maxOps ? allFiltered.slice(plan.maxOps) : [];
+
   return (
     <>
       <div className="dashboard-header">
@@ -659,30 +702,27 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
             <h1>✦ MyOps Dashboard</h1>
             <p>Your personalised global opportunities, curated by Claude AI</p>
           </div>
-          {usage && (
-            <div style={{minWidth:'220px',maxWidth:'300px',flex:'0 0 auto'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'.35rem'}}>
-                <span style={{fontSize:'.72rem',letterSpacing:'.08em',textTransform:'uppercase',color:'var(--muted)'}}>AI Tokens</span>
-                <span style={{
-                  fontSize:'.82rem',fontWeight:700,
-                  color: usage.percentUsed>=90 ? 'var(--rust)' : usage.percentUsed>=70 ? '#c9893c' : 'var(--gold)'
-                }}>
-                  {usage.tokensUsed.toLocaleString()} <span style={{fontWeight:400,color:'var(--muted)'}}>/ {usage.tokenLimit.toLocaleString()}</span>
-                </span>
-              </div>
-              <div style={{height:'6px',background:'rgba(255,255,255,0.1)',borderRadius:'3px',overflow:'hidden'}}>
-                <div style={{
-                  height:'100%',borderRadius:'3px',
-                  width:`${usage.percentUsed}%`,
-                  background: usage.percentUsed>=90 ? 'var(--rust)' : usage.percentUsed>=70 ? '#c9893c' : 'var(--gold)',
-                  transition:'width .5s'
-                }}/>
-              </div>
-              <div style={{fontSize:'.68rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>
-                Resets {usage.resetDate}
-              </div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'.6rem'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
+              <span style={{fontSize:'.72rem',letterSpacing:'.08em',textTransform:'uppercase',color:'var(--muted)'}}>Plan</span>
+              <span style={{fontSize:'.82rem',fontWeight:700,color:plan.color,background:'rgba(255,255,255,0.08)',padding:'.2rem .7rem',borderRadius:'100px',border:`1px solid ${plan.color}44`}}>{plan.label}</span>
+              <button onClick={()=>setPage('pricing')} style={{fontSize:'.72rem',color:'var(--gold)',background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Upgrade</button>
             </div>
-          )}
+            {usage && (
+              <div style={{minWidth:'220px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'.3rem'}}>
+                  <span style={{fontSize:'.72rem',letterSpacing:'.08em',textTransform:'uppercase',color:'var(--muted)'}}>AI Tokens</span>
+                  <span style={{fontSize:'.82rem',fontWeight:700,color:usage.percentUsed>=90?'var(--rust)':usage.percentUsed>=70?'#c9893c':'var(--gold)'}}>
+                    {usage.tokensUsed.toLocaleString()} <span style={{fontWeight:400,color:'var(--muted)'}}>/ {usage.tokenLimit.toLocaleString()}</span>
+                  </span>
+                </div>
+                <div style={{height:'6px',background:'rgba(255,255,255,0.1)',borderRadius:'3px',overflow:'hidden'}}>
+                  <div style={{height:'100%',borderRadius:'3px',width:`${usage.percentUsed}%`,background:usage.percentUsed>=90?'var(--rust)':usage.percentUsed>=70?'#c9893c':'var(--gold)',transition:'width .5s'}}/>
+                </div>
+                <div style={{fontSize:'.68rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>Resets {usage.resetDate}</div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {loadingOps&&<div className="loading-banner"><div className="spinner"/>Claude is analysing your profile and searching the world for opportunities…</div>}
@@ -690,7 +730,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         <div className="dash-controls">
           {filters.map(f=><button key={f} className={`filter-btn${dashFilter===f?' active':''}`} onClick={()=>setDashFilter(f)}>{f}</button>)}
         </div>
-        {!loadingOps&&displayed.length===0&&(
+        {!loadingOps&&allFiltered.length===0&&(
           <div className="empty-dash">
             <div className="icon">🌐</div>
             <h3>No opportunities yet</h3>
@@ -699,8 +739,29 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
           </div>
         )}
         <div className="ops-grid">
-          {displayed.map((op,i)=><OpTile key={op.id} op={op} delay={i*60}/>)}
+          {visibleOps.map((op,i)=><OpTile key={op.id} op={op} delay={i*60}/>)}
+          {lockedOps.map((op,i)=>(
+            <div key={op.id} className="op-tile locked-tile" style={{animationDelay:`${(visibleOps.length+i)*60}ms`}}>
+              <div className="op-tile-header">
+                <span className={`op-category cat-${op.type}`}>{op.type}</span>
+                <span className="op-match">{op.matchScore}% match</span>
+              </div>
+              <div className="op-tile-body">
+                <h3 style={{filter:'blur(5px)',userSelect:'none'}}>████████████</h3>
+                <div className="op-org" style={{filter:'blur(4px)',userSelect:'none'}}>████████</div>
+                <p className="op-desc" style={{filter:'blur(3px)',userSelect:'none'}}>████████████████████████████</p>
+              </div>
+            </div>
+          ))}
         </div>
+        {lockedOps.length>0&&(
+          <div style={{textAlign:'center',marginTop:'2rem',padding:'2rem',background:'var(--card)',border:'1.5px dashed var(--border)',borderRadius:'12px'}}>
+            <div style={{fontSize:'1.5rem',marginBottom:'.5rem'}}>🔒</div>
+            <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:'1.1rem',marginBottom:'.4rem'}}>{lockedOps.length} more opportunit{lockedOps.length>1?'ies':'y'} locked</h3>
+            <p style={{fontSize:'.85rem',color:'var(--muted)',marginBottom:'1rem'}}>Upgrade to Gold or Platinum to unlock all opportunities.</p>
+            <button className="btn-primary" onClick={()=>setPage('pricing')}>View Plans →</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -730,6 +791,126 @@ function OpTile({ op, delay }) {
           ? <a className="op-action" href={op.url} target="_blank" rel="noopener noreferrer">Apply Now ↗</a>
           : <span className="op-action" style={{opacity:.4,cursor:'default'}}>No link</span>
         }
+      </div>
+    </div>
+  );
+}
+
+// ─── PRICING PAGE ─────────────────────────────────────────────────────────────
+function PricingPage({ setModal, user, navigateTo }) {
+  const plans = [
+    {
+      id: 'silver',
+      icon: '🥈',
+      name: 'Silver',
+      price: 'Free',
+      priceSub: '',
+      desc: 'Get started and discover your first opportunity in each category.',
+      color: '#9ca3af',
+      cta: 'Get Started',
+      ctaStyle: 'outline',
+      features: [
+        { text: '1 opportunity per category (Job, Education, Migration)', on: true },
+        { text: 'Profile builder', on: true },
+        { text: 'Blog & News access', on: true },
+        { text: 'Multiple AI analyses', on: false },
+        { text: 'Full opportunity results', on: false },
+        { text: 'Token allowance', on: false },
+      ],
+    },
+    {
+      id: 'gold',
+      icon: '🥇',
+      name: 'Gold',
+      price: '$9',
+      priceSub: '/ month',
+      desc: 'Unlock all opportunities and run multiple AI analyses every month.',
+      color: '#c9a84c',
+      cta: 'Upgrade to Gold',
+      ctaStyle: 'primary',
+      featured: true,
+      features: [
+        { text: 'All opportunities across Job, Education & Migration', on: true },
+        { text: 'Profile builder', on: true },
+        { text: 'Blog & News access', on: true },
+        { text: 'Multiple AI analyses per month', on: true },
+        { text: '2,000 tokens / month', on: true },
+        { text: 'Priority support', on: false },
+      ],
+    },
+    {
+      id: 'platinum',
+      icon: '💎',
+      name: 'Platinum',
+      price: '$29',
+      priceSub: '/ month',
+      desc: 'Everything in Gold with a much higher token limit for power users.',
+      color: '#7dd3fc',
+      cta: 'Upgrade to Platinum',
+      ctaStyle: 'dark',
+      features: [
+        { text: 'All opportunities across Job, Education & Migration', on: true },
+        { text: 'Profile builder', on: true },
+        { text: 'Blog & News access', on: true },
+        { text: 'Multiple AI analyses per month', on: true },
+        { text: '20,000 tokens / month', on: true },
+        { text: 'Priority support', on: true },
+      ],
+    },
+  ];
+
+  function handleCta(plan) {
+    if (!user) { setModal('signup'); return; }
+    // Payment integration placeholder — show alert for now
+    if (plan.id === 'silver') { navigateTo('profile'); return; }
+    alert(`Payment integration coming soon!\n\nTo manually activate ${plan.name}, contact support.`);
+  }
+
+  const currentPlan = user?.plan || 'silver';
+
+  return (
+    <div className="pricing-page">
+      <div className="pricing-hero">
+        <h1>Simple, Transparent Pricing</h1>
+        <p>Choose the plan that matches your ambition. Upgrade or downgrade anytime.</p>
+      </div>
+      <div className="pricing-grid">
+        {plans.map(plan => (
+          <div key={plan.id} className={`pricing-card${plan.featured?' featured':''}`}>
+            {plan.featured && <div className="pricing-badge">Most Popular</div>}
+            <div className="plan-icon">{plan.icon}</div>
+            <div className="plan-name" style={{color:plan.color}}>
+              {plan.name}
+              {currentPlan===plan.id&&<span className="current-plan-badge">Current</span>}
+            </div>
+            <div className="plan-price">
+              {plan.price}<span>{plan.priceSub}</span>
+            </div>
+            <p className="plan-desc">{plan.desc}</p>
+            <div className="plan-divider"/>
+            <ul className="plan-features">
+              {plan.features.map((f,i)=>(
+                <li key={i} className={!f.on?'dimmed':''}>
+                  <span className={f.on?'check':'cross'}>{f.on?'✓':'✕'}</span>
+                  {f.text}
+                </li>
+              ))}
+            </ul>
+            <button
+              className={`plan-cta ${plan.ctaStyle}`}
+              onClick={()=>handleCta(plan)}
+              disabled={currentPlan===plan.id}
+              style={currentPlan===plan.id?{opacity:.5,cursor:'not-allowed'}:{}}
+            >
+              {currentPlan===plan.id ? 'Current Plan' : plan.cta}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{textAlign:'center',marginTop:'3rem',padding:'2rem',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',maxWidth:'600px',margin:'3rem auto 0'}}>
+        <p style={{fontFamily:"'Playfair Display',serif",fontSize:'1.1rem',marginBottom:'.5rem'}}>Need a custom plan for your organisation?</p>
+        <p style={{fontSize:'.85rem',color:'var(--muted)',marginBottom:'1rem'}}>We offer team plans with shared token pools and admin dashboards.</p>
+        <button className="btn-outline" style={{color:'var(--ink)',borderColor:'var(--border)'}} onClick={()=>alert('Contact us at hello@myops.app')}>Contact Sales →</button>
       </div>
     </div>
   );
