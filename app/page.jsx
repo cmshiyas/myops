@@ -621,7 +621,61 @@ export default function App() {
               <button
                 onClick={() => { setSubscriptionModal(null); handleManageBillingNav(); }}
                 disabled={billingLoading}
-                style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:'8px',padding:'.8rem',fontWeight:700,fontSize:'.9rem',cursor:'pointer',opacity:billingLoading?.6:
+                style={{background:'#dc2626',color:'#fff',border:'none',borderRadius:'8px',padding:'.8rem',fontWeight:700,fontSize:'.9rem',cursor:'pointer',opacity:billingLoading?0.6:1}}>
+                {billingLoading ? 'Opening portal…' : 'Yes, Cancel Subscription'}
+              </button>
+              <button
+                onClick={() => setSubscriptionModal(null)}
+                style={{background:'transparent',color:'var(--ink)',border:'1.5px solid var(--border)',borderRadius:'8px',padding:'.8rem',fontWeight:600,fontSize:'.9rem',cursor:'pointer'}}>
+                Keep My Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Downgrade Subscription Modal ── */}
+      {subscriptionModal === 'downgrade' && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSubscriptionModal(null)}>
+          <div className="modal" style={{maxWidth:420}}>
+            <button className="modal-close" onClick={() => setSubscriptionModal(null)}>✕</button>
+            <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
+              <div style={{fontSize:'2.5rem',marginBottom:'.75rem'}}>⬇️</div>
+              <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:'1.4rem',marginBottom:'.5rem'}}>Downgrade to Gold?</h2>
+              <p style={{fontSize:'.88rem',color:'var(--muted)',lineHeight:1.6}}>
+                You'll move to the Gold plan at your next billing cycle. You keep Platinum access until then.
+              </p>
+            </div>
+            <div style={{background:'var(--paper)',border:'1px solid var(--border)',borderRadius:'8px',padding:'1rem',marginBottom:'1.5rem',display:'flex',flexDirection:'column',gap:'.45rem'}}>
+              {['Priority support removed','Token limit drops to 2,000/mo','All other Gold features remain'].map((item, i) => (
+                <div key={item} style={{display:'flex',alignItems:'center',gap:'.5rem',fontSize:'.83rem',color:'var(--muted)'}}>
+                  <span style={{color: i < 2 ? 'var(--rust)' : 'var(--forest)'}}>{i < 2 ? '✕' : '✓'}</span> {item}
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'.6rem'}}>
+              <button
+                onClick={() => { setSubscriptionModal(null); handleManageBillingNav(); }}
+                disabled={billingLoading}
+                style={{background:'var(--ink)',color:'var(--gold)',border:'none',borderRadius:'8px',padding:'.8rem',fontWeight:700,fontSize:'.9rem',cursor:'pointer',opacity:billingLoading?0.6:1}}>
+                {billingLoading ? 'Opening portal…' : 'Downgrade to Gold'}
+              </button>
+              <button
+                onClick={() => setSubscriptionModal(null)}
+                style={{background:'transparent',color:'var(--ink)',border:'1.5px solid var(--border)',borderRadius:'8px',padding:'.8rem',fontWeight:600,fontSize:'.9rem',cursor:'pointer'}}>
+                Keep Platinum
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Auth Modal ── */}
+      {(modal === 'login' || modal === 'signup') && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div className="modal">
+            <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+            <h2>{modal === 'signup' ? 'Create Account' : 'Welcome Back'}</h2>
             <p className="modal-sub">{modal === 'signup' ? 'Join thousands discovering global opportunities.' : 'Sign in to access your dashboard.'}</p>
             {authMsg && <div className={`alert alert-${authMsg.type}`}>{authMsg.text}</div>}
             {modal === 'signup' && (
