@@ -363,6 +363,35 @@ export default function App() {
           {navLinks.map(l => (
             <button key={l} className={`nav-link${page === l.toLowerCase() ? ' active' : ''}`} onClick={() => navigateTo(l.toLowerCase())}>{l}</button>
           ))}
+          {user && (() => {
+            const plan = user?.plan || 'silver';
+            const cfg = {
+              silver:   { label: '🥈 Silver',   color: '#9ca3af', bg: 'rgba(156,163,175,.12)', border: 'rgba(156,163,175,.3)' },
+              gold:     { label: '🥇 Gold',     color: '#c9a84c', bg: 'rgba(201,168,76,.12)',  border: 'rgba(201,168,76,.35)' },
+              platinum: { label: '💎 Platinum', color: '#7dd3fc', bg: 'rgba(125,211,252,.12)', border: 'rgba(125,211,252,.35)' },
+            }[plan] || { label: '🥈 Silver', color: '#9ca3af', bg: 'rgba(156,163,175,.12)', border: 'rgba(156,163,175,.3)' };
+            return (
+              <button
+                onClick={() => navigateTo('pricing')}
+                title="View or upgrade your plan"
+                style={{
+                  background: cfg.bg,
+                  border: `1px solid ${cfg.border}`,
+                  color: cfg.color,
+                  borderRadius: '100px',
+                  padding: '.28rem .75rem',
+                  fontSize: '.72rem',
+                  fontWeight: 700,
+                  letterSpacing: '.04em',
+                  cursor: 'pointer',
+                  transition: 'all .2s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cfg.label}
+              </button>
+            );
+          })()}
           {user
             ? <button className="nav-link" style={{ color: '#c9a84c' }} onClick={handleLogout}>Log out</button>
             : <button className="nav-cta" onClick={() => { setModal('signup'); setAuthMsg(null); }}>Sign Up</button>
