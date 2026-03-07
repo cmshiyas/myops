@@ -1,4 +1,3 @@
-'use server';
 const MONTHLY_TOKEN_LIMIT = parseInt(process.env.TOKEN_LIMIT_PER_MONTH || '50000', 10);
 
 export async function GET(req) {
