@@ -550,18 +550,25 @@ function BlogPage() {
       {!loading && !error && (
         <div className="blog-grid">
           {posts.map(p => (
-            <div className="blog-card" key={p.id} style={{animation:'fadeIn .4s ease both',animationDelay:`${(p.id-1)*80}ms`}}>
+            <a
+              key={p.id}
+              href={p.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="blog-card"
+              style={{animation:'fadeIn .4s ease both',animationDelay:`${(p.id-1)*80}ms`,textDecoration:'none',color:'inherit',display:'block',cursor:'pointer'}}
+            >
               <div className="blog-img" style={{background: p.bg || '#f0f4f8'}}>{p.emoji}</div>
               <div className="blog-body">
                 <div className="blog-tag">{p.tag}</div>
                 <h3>{p.title}</h3>
                 <p>{p.excerpt}</p>
-                <div className="blog-meta" style={{display:'flex',justifyContent:'space-between'}}>
+                <div className="blog-meta" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <span>{p.date}</span>
-                  {p.readTime && <span style={{color:'var(--muted)',fontSize:'.75rem'}}>{p.readTime}</span>}
+                  <span style={{color:'var(--gold)',fontSize:'.78rem',fontWeight:600}}>Read →</span>
                 </div>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       )}
@@ -652,17 +659,27 @@ function NewsPage() {
       {!loading && !error && (
         <div className="news-list">
           {items.map((n,i) => (
-            <div className="news-item" key={n.id} style={{animation:'fadeIn .35s ease both',animationDelay:`${i*60}ms`}}>
+            <a
+              key={n.id}
+              href={n.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="news-item"
+              style={{animation:'fadeIn .35s ease both',animationDelay:`${i*60}ms`,textDecoration:'none',color:'inherit',cursor:'pointer'}}
+            >
               <span className="news-badge" style={n.urgent?{background:'var(--rust)',color:'#fff'}:{}}>{n.badge}</span>
               <div className="news-content">
                 <h4>{n.title}</h4>
                 <p>{n.desc}</p>
-                <div className="news-date" style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
-                  {n.urgent && <span style={{fontSize:'.65rem',background:'rgba(184,92,56,.12)',color:'var(--rust)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:700}}>BREAKING</span>}
-                  {n.date}
+                <div className="news-date" style={{display:'flex',alignItems:'center',gap:'.5rem',justifyContent:'space-between'}}>
+                  <span style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
+                    {n.urgent && <span style={{fontSize:'.65rem',background:'rgba(184,92,56,.12)',color:'var(--rust)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:700}}>BREAKING</span>}
+                    {n.date}
+                  </span>
+                  <span style={{color:'var(--gold)',fontSize:'.78rem',fontWeight:600}}>Read →</span>
                 </div>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       )}
