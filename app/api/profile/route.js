@@ -17,7 +17,7 @@ export async function POST(req) {
     const supabase = getSupabase();
     const { error } = await supabase
       .from('profiles')
-      .upsert({ user_id: userId, ...profile, updated_at: new Date().toISOString() });
+      .upsert({ user_id: userId, ...profile, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
     if (error) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ success: true });

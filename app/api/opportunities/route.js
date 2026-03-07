@@ -49,7 +49,7 @@ export async function POST(req) {
         user_id: userId,
         opportunities,
         generated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'user_id' });
 
     if (error) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ success: true });
