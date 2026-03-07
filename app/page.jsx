@@ -185,27 +185,28 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true); // true until session check completes
 
-  // Restore session on mount — keep UI blocked until we know auth state
+  // Restore session on mount — blocks UI until session check is complete
   useEffect(() => {
-    // Check for existing session (survives page refresh)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const u = session.user;
-        const restoredUser = { id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email };
-        setUser(restoredUser);
+        setUser({ id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email });
         loadProfile(u.id);
-        // Restore last page the user was on (profile or myops)
-        const savedPage = typeof window !== 'undefined' ? localStorage.getItem('lastPage') : null;
-        if (savedPage === 'profile' || savedPage === 'myops') setPage(savedPage);
+        // Read saved page BEFORE unblocking UI so everything renders together
+        try {
+          const savedPage = localStorage.getItem('lastPage');
+          if (savedPage === 'profile' || savedPage === 'myops') setPage(savedPage);
+        } catch (_) {}
       }
-      setSessionLoading(false); // unblock UI regardless of outcome
+      // Unblock UI only after user + page are both set above
+      setSessionLoading(false);
     });
 
-    // Keep session in sync if user signs in/out in another tab
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Sync sign-out across tabs
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setUser(null); setProfile(null); setOpportunities([]); setPage('home');
-        if (typeof window !== 'undefined') localStorage.removeItem('lastPage');
+        try { localStorage.removeItem('lastPage'); } catch (_) {}
       }
     });
     return () => subscription.unsubscribe();
@@ -300,12 +301,18 @@ export default function App() {
         </div>
       </nav>
 
-      <div className="page" key={page}>
+      <div className="page">
         {page === 'home' && <HomePage setPage={setPage} setModal={setModal} user={user} />}
         {page === 'blog' && <BlogPage />}
         {page === 'news' && <NewsPage />}
-        {page === 'profile' && user && <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={setPage} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} />}
-        {page === 'myops' && user && <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={setPage} user={user} />}
+        {page === 'profile' && (user
+          ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} />
+          : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
+        )}
+        {page === 'myops' && (user
+          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} />
+          : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your opportunities.</p></div>
+        )}
       </div>
 
       <footer className="footer">© 2026 <span>OpportunityFinder</span> — Powered by Claude AI · Connecting talent to the world</footer>
