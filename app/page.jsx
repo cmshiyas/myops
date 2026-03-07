@@ -26,6 +26,7 @@ const GlobalStyles = () => (
     .nav-cta:hover{background:var(--gold-light)}
     .page{flex:1;animation:fadeIn .35s ease}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
     .hero{background:var(--ink);padding:5rem 2rem 4rem;text-align:center;position:relative;overflow:hidden}
     .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 40%,rgba(201,168,76,.12) 0%,transparent 60%),radial-gradient(ellipse at 20% 80%,rgba(44,95,130,.1) 0%,transparent 50%)}
     .hero-eyebrow{font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:1.25rem;position:relative}
@@ -464,41 +465,207 @@ function HomePage({ setPage, setModal, user }) {
 
 // ─── BLOG ─────────────────────────────────────────────────────────────────────
 function BlogPage() {
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
+
+  useEffect(() => {
+    // Check sessionStorage cache first — avoid regenerating on every tab switch
+    try {
+      const cached = sessionStorage.getItem('blog_cache');
+      if (cached) {
+        const { posts: p, generatedAt: g, cachedAt } = JSON.parse(cached);
+        // Use cache if less than 10 minutes old
+        if (Date.now() - cachedAt < 10 * 60 * 1000) {
+          setPosts(p); setGeneratedAt(g); setLoading(false); return;
+        }
+      }
+    } catch (_) {}
+
+    fetch('/api/blog')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setPosts(d.posts);
+        setGeneratedAt(d.generatedAt);
+        try { sessionStorage.setItem('blog_cache', JSON.stringify({ posts: d.posts, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
+      })
+      .catch(() => setError('Failed to load posts'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function handleRefresh() {
+    try { sessionStorage.removeItem('blog_cache'); } catch (_) {}
+    setLoading(true); setError(null); setPosts([]);
+    fetch('/api/blog')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setPosts(d.posts); setGeneratedAt(d.generatedAt);
+        try { sessionStorage.setItem('blog_cache', JSON.stringify({ posts: d.posts, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
+      })
+      .catch(() => setError('Failed to load posts'))
+      .finally(() => setLoading(false));
+  }
+
   return (
     <div className="section">
-      <h2 className="section-title">Blog</h2>
-      <p className="section-sub">Insights on global careers, education, and migration.</p>
-      <div className="blog-grid">
-        {BLOG_POSTS.map(p => (
-          <div className="blog-card" key={p.id}>
-            <div className="blog-img" style={{ background: p.bg }}>{p.emoji}</div>
-            <div className="blog-body">
-              <div className="blog-tag">{p.tag}</div>
-              <h3>{p.title}</h3>
-              <p>{p.excerpt}</p>
-              <div className="blog-meta">{p.date}</div>
-            </div>
-          </div>
-        ))}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
+        <div>
+          <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
+          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Claude AI.</p>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
+          {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
+          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?.6:1}}>
+            {loading ? '…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
+
+      {loading && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'1.5rem'}}>
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',overflow:'hidden',animation:'pulse 1.5s ease infinite'}}>
+              <div style={{height:'120px',background:'#e8e3d9'}}/>
+              <div style={{padding:'1.25rem',display:'flex',flexDirection:'column',gap:'.6rem'}}>
+                <div style={{height:'10px',background:'#e8e3d9',borderRadius:'4px',width:'30%'}}/>
+                <div style={{height:'16px',background:'#e8e3d9',borderRadius:'4px',width:'90%'}}/>
+                <div style={{height:'12px',background:'#e8e3d9',borderRadius:'4px',width:'70%'}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div style={{textAlign:'center',padding:'3rem',color:'var(--muted)'}}>
+          <div style={{fontSize:'2rem',marginBottom:'.75rem'}}>⚠️</div>
+          <p style={{marginBottom:'1rem'}}>{error}</p>
+          <button className="btn-primary" onClick={handleRefresh}>Try Again</button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="blog-grid">
+          {posts.map(p => (
+            <div className="blog-card" key={p.id} style={{animation:'fadeIn .4s ease both',animationDelay:`${(p.id-1)*80}ms`}}>
+              <div className="blog-img" style={{background: p.bg || '#f0f4f8'}}>{p.emoji}</div>
+              <div className="blog-body">
+                <div className="blog-tag">{p.tag}</div>
+                <h3>{p.title}</h3>
+                <p>{p.excerpt}</p>
+                <div className="blog-meta" style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>{p.date}</span>
+                  {p.readTime && <span style={{color:'var(--muted)',fontSize:'.75rem'}}>{p.readTime}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── NEWS ─────────────────────────────────────────────────────────────────────
 function NewsPage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
+
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem('news_cache');
+      if (cached) {
+        const { items: it, generatedAt: g, cachedAt } = JSON.parse(cached);
+        if (Date.now() - cachedAt < 10 * 60 * 1000) {
+          setItems(it); setGeneratedAt(g); setLoading(false); return;
+        }
+      }
+    } catch (_) {}
+
+    fetch('/api/news')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setItems(d.items); setGeneratedAt(d.generatedAt);
+        try { sessionStorage.setItem('news_cache', JSON.stringify({ items: d.items, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
+      })
+      .catch(() => setError('Failed to load news'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function handleRefresh() {
+    try { sessionStorage.removeItem('news_cache'); } catch (_) {}
+    setLoading(true); setError(null); setItems([]);
+    fetch('/api/news')
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setItems(d.items); setGeneratedAt(d.generatedAt);
+        try { sessionStorage.setItem('news_cache', JSON.stringify({ items: d.items, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
+      })
+      .catch(() => setError('Failed to load news'))
+      .finally(() => setLoading(false));
+  }
+
   return (
     <div className="section">
-      <h2 className="section-title">Latest News</h2>
-      <p className="section-sub">Breaking updates in global mobility, jobs, and education.</p>
-      <div className="news-list">
-        {NEWS_ITEMS.map(n => (
-          <div className="news-item" key={n.id}>
-            <span className="news-badge">{n.badge}</span>
-            <div className="news-content"><h4>{n.title}</h4><p>{n.desc}</p><div className="news-date">{n.date}</div></div>
-          </div>
-        ))}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
+        <div>
+          <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News</h2>
+          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Claude AI.</p>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
+          {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
+          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?.6:1}}>
+            {loading ? '…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
+
+      {loading && (
+        <div className="news-list">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="news-item" style={{animation:'pulse 1.5s ease infinite'}}>
+              <div style={{width:'80px',height:'22px',background:'#e8e3d9',borderRadius:'4px',flexShrink:0}}/>
+              <div style={{flex:1,display:'flex',flexDirection:'column',gap:'.5rem'}}>
+                <div style={{height:'16px',background:'#e8e3d9',borderRadius:'4px',width:'80%'}}/>
+                <div style={{height:'12px',background:'#e8e3d9',borderRadius:'4px',width:'60%'}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div style={{textAlign:'center',padding:'3rem',color:'var(--muted)'}}>
+          <div style={{fontSize:'2rem',marginBottom:'.75rem'}}>⚠️</div>
+          <p style={{marginBottom:'1rem'}}>{error}</p>
+          <button className="btn-primary" onClick={handleRefresh}>Try Again</button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="news-list">
+          {items.map((n,i) => (
+            <div className="news-item" key={n.id} style={{animation:'fadeIn .35s ease both',animationDelay:`${i*60}ms`}}>
+              <span className="news-badge" style={n.urgent?{background:'var(--rust)',color:'#fff'}:{}}>{n.badge}</span>
+              <div className="news-content">
+                <h4>{n.title}</h4>
+                <p>{n.desc}</p>
+                <div className="news-date" style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
+                  {n.urgent && <span style={{fontSize:'.65rem',background:'rgba(184,92,56,.12)',color:'var(--rust)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:700}}>BREAKING</span>}
+                  {n.date}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
