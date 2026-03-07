@@ -846,7 +846,7 @@ function PricingPage({ setModal, user, navigateTo }) {
       id: 'platinum',
       icon: '💎',
       name: 'Platinum',
-      price: '$29',
+      price: '$19',
       priceSub: '/ month',
       desc: 'Everything in Gold with a much higher token limit for power users.',
       color: '#7dd3fc',
