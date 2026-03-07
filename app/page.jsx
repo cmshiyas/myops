@@ -185,30 +185,46 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true); // true until session check completes
 
-  // Restore session on mount — blocks UI until session check is complete
+  // Restore session on mount
+  // onAuthStateChange fires immediately with INITIAL_SESSION — the most reliable
+  // way to detect a persisted session on page refresh in Supabase v2
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const u = session.user;
-        setUser({ id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email });
-        loadProfile(u.id);
-        // Read saved page BEFORE unblocking UI so everything renders together
-        try {
-          const savedPage = localStorage.getItem('lastPage');
-          if (savedPage === 'profile' || savedPage === 'myops') setPage(savedPage);
-        } catch (_) {}
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        // Fires on every page load with the stored session (or null if logged out)
+        if (session?.user) {
+          const u = session.user;
+          setUser({ id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email });
+          loadProfile(u.id);
+          try {
+            const savedPage = localStorage.getItem('lastPage');
+            if (savedPage === 'profile' || savedPage === 'myops') setPage(savedPage);
+          } catch (_) {}
+        }
+        // Unblock UI after initial session check — whether logged in or not
+        setSessionLoading(false);
       }
-      // Unblock UI only after user + page are both set above
-      setSessionLoading(false);
-    });
 
-    // Sync sign-out across tabs
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        // Fires after a fresh login (not on refresh — that's INITIAL_SESSION)
+        // Nothing extra needed here; handleAuth already sets user + navigates
+      }
+
       if (event === 'SIGNED_OUT') {
         setUser(null); setProfile(null); setOpportunities([]); setPage('home');
         try { localStorage.removeItem('lastPage'); } catch (_) {}
+        setSessionLoading(false);
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
+        // Session silently refreshed — update user in case metadata changed
+        if (session?.user) {
+          const u = session.user;
+          setUser({ id: u.id, name: u.user_metadata?.full_name || u.email.split('@')[0], email: u.email });
+        }
       }
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
