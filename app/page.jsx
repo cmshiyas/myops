@@ -256,18 +256,34 @@ export default function App() {
     setAuthLoading(true);
     setAuthMsg(null);
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: type, email: authForm.email, password: authForm.password, name: authForm.name }),
-      });
-      const data = await res.json();
-      if (data.error) { setAuthMsg({ type: 'error', text: data.error }); return; }
+      let result;
+      if (type === 'signup') {
+        // Sign up directly via browser Supabase client so session is persisted locally
+        result = await supabase.auth.signUp({
+          email: authForm.email,
+          password: authForm.password,
+          options: { data: { full_name: authForm.name } },
+        });
+      } else {
+        // Sign in directly via browser Supabase client
+        result = await supabase.auth.signInWithPassword({
+          email: authForm.email,
+          password: authForm.password,
+        });
+      }
+
+      const { data, error } = result;
+      if (error) { setAuthMsg({ type: 'error', text: error.message }); return; }
+      if (!data.user) { setAuthMsg({ type: 'error', text: 'No user returned. Please try again.' }); return; }
+
+      // Session is now stored in localStorage by the Supabase client automatically.
+      // onAuthStateChange will fire SIGNED_IN, but we also set state here directly
+      // so the UI updates immediately without waiting for the event.
       const u = data.user;
       setUser({ id: u.id, name: u.user_metadata?.full_name || authForm.name || authForm.email.split('@')[0], email: u.email });
       setModal(null);
       navigateTo('profile');
-      if (u.id) loadProfile(u.id);
+      loadProfile(u.id);
     } catch (_) {
       setAuthMsg({ type: 'error', text: 'Something went wrong. Please try again.' });
     } finally {
@@ -277,7 +293,9 @@ export default function App() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
+    // onAuthStateChange SIGNED_OUT will also fire, but clear state here immediately
     setUser(null); setProfile(null); setOpportunities([]); setPage('home');
+    try { localStorage.removeItem('lastPage'); } catch (_) {}
   }
 
   const navLinks = ['Home', 'Blog', 'News', ...(user ? ['Profile', 'MyOps'] : [])];
