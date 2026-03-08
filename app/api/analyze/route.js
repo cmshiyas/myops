@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const PLAN_TOKEN_LIMITS = {
-  silver:   0,
+  silver:   200,
   gold:     2000,
   platinum: 20000,
 };
