@@ -352,31 +352,48 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadProfile(userId) {
-    try {
-      // Load profile and saved opportunities in parallel
-      const [profileRes, opsRes] = await Promise.all([
-        fetch(`/api/profile?userId=${userId}`),
-        fetch(`/api/opportunities?userId=${userId}`),
-      ]);
-      const [profileData, opsData] = await Promise.all([profileRes.json(), opsRes.json()]);
+  function applyProfileData(profileData, opsData) {
+    if (profileData?.profile) {
+      const p = profileData.profile;
+      const normalised = {
+        ...p,
+        skills:    Array.isArray(p.skills)    ? p.skills    : [],
+        interests: Array.isArray(p.interests) ? p.interests : [],
+        languages: Array.isArray(p.languages) ? p.languages : [],
+      };
+      setProfile(normalised);
+      if (p.plan) setUser(prev => prev ? { ...prev, plan: p.plan } : prev);
+      // Cache in localStorage for instant load next time
+      try {
+        localStorage.setItem('lumivo_profile_cache', JSON.stringify({
+          profile: normalised, plan: p.plan, cachedAt: Date.now()
+        }));
+      } catch (_) {}
+    }
+    // profile route now returns opportunities too
+    const ops = profileData?.opportunities || opsData?.opportunities || [];
+    if (ops.length > 0) setOpportunities(ops);
+  }
 
-      if (profileData.profile) {
-        const p = profileData.profile;
-        setProfile({
-          ...p,
-          skills:    Array.isArray(p.skills)    ? p.skills    : [],
-          interests: Array.isArray(p.interests) ? p.interests : [],
-          languages: Array.isArray(p.languages) ? p.languages : [],
-        });
-        // Store plan in user state so it flows to all pages
-        if (p.plan) {
-          setUser(prev => prev ? { ...prev, plan: p.plan } : prev);
+  async function loadProfile(userId) {
+    // 1. Show cached profile instantly while fetching fresh data
+    try {
+      const raw = localStorage.getItem('lumivo_profile_cache');
+      if (raw) {
+        const { profile: cached, plan, cachedAt } = JSON.parse(raw);
+        const AGE_LIMIT = 30 * 60 * 1000; // 30 minutes
+        if (Date.now() - cachedAt < AGE_LIMIT) {
+          setProfile(cached);
+          if (plan) setUser(prev => prev ? { ...prev, plan } : prev);
         }
       }
-      if (opsData.opportunities?.length > 0) {
-        setOpportunities(opsData.opportunities);
-      }
+    } catch (_) {}
+
+    // 2. Fetch fresh data in the background — profile route now returns both
+    try {
+      const res = await fetch(`/api/profile?userId=${userId}`);
+      const data = await res.json();
+      applyProfileData(data, null);
     } catch (_) {}
   }
 
@@ -440,9 +457,11 @@ export default function App() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    // onAuthStateChange SIGNED_OUT will also fire, but clear state here immediately
     setUser(null); setProfile(null); setOpportunities([]); setPage('home');
-    try { localStorage.removeItem('lastPage'); } catch (_) {}
+    try {
+      localStorage.removeItem('lastPage');
+      localStorage.removeItem('lumivo_profile_cache');
+    } catch (_) {}
   }
 
   const navLinks = ['Home', 'Blog', 'News', 'Pricing', ...(user ? ['Profile', 'MyOps'] : [])];
@@ -1040,7 +1059,10 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
       const res = await fetch('/api/profile', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: user.id, profile: form }) });
       const data = await res.json();
       if (data.error) { setSaveErr(data.error); return; }
-      setProfile(form); setSaved(true); setTimeout(()=>setSaved(false),3000);
+      setProfile(form);
+      // Bust localStorage cache so next session loads fresh
+      try { localStorage.removeItem('lumivo_profile_cache'); } catch (_) {}
+      setSaved(true); setTimeout(()=>setSaved(false),3000);
     } catch(_) { setSaveErr('Failed to save. Please try again.'); }
     finally { setSaving(false); }
   }
