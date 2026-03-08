@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Codelabs — AI-Powered Global Opportunities',
-  description: 'Discover jobs, scholarships and migration pathways tailored to your profile. Powered by Codelabs Pvt Ltd.',
+  title: 'Lumivo — AI-Powered Global Opportunities',
+  description: 'Lumivo uses AI to discover jobs, scholarships and migration pathways tailored to your profile — worldwide.',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

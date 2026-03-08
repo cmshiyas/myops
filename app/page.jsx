@@ -461,7 +461,7 @@ export default function App() {
     return (
       <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--ink)',flexDirection:'column',gap:'1rem'}}>
         <GlobalStyles />
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:'1.6rem',fontWeight:900,color:'var(--gold)'}}>Code<span style={{color:'var(--paper)'}}>labs</span></div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:'1.6rem',fontWeight:900,color:'var(--gold)'}}>Lumi<span style={{color:'var(--paper)'}}>vo</span></div>
         <div style={{width:32,height:32,border:'3px solid rgba(201,168,76,.3)',borderTopColor:'var(--gold)',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
       </div>
     );
@@ -471,7 +471,7 @@ export default function App() {
     <div className="app">
       <GlobalStyles />
       <nav className="nav">
-        <div className="nav-logo" onClick={() => { navigateTo('home'); }}>Code<span>labs</span></div>
+        <div className="nav-logo" onClick={() => { navigateTo('home'); }}>Lumi<span>vo</span></div>
 
         {/* ── Desktop nav ── */}
         <div className="nav-links">
@@ -633,7 +633,7 @@ export default function App() {
         )}
       </div>
 
-      <footer className="footer">© 2026 <span>Codelabs Pvt Ltd</span> · Powered by AI · Connecting talent to the world</footer>
+      <footer className="footer">© 2026 <span>Lumivo</span> · Powered by AI · Connecting talent to the world</footer>
 
       {/* ── Cancel Subscription Modal ── */}
       {subscriptionModal === 'cancel' && (
@@ -759,7 +759,7 @@ function HomePage({ setPage, setModal, user }) {
   return (
     <>
       <div className="hero">
-        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery by Codelabs</p>
+        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery by Lumivo</p>
         <h1>Your Skills Deserve a <em>World-Class</em> Stage</h1>
         <p className="hero-sub">Create your profile. Let our AI study it. Discover jobs, scholarships, and migration pathways tailored exactly to you — worldwide.</p>
         <div className="hero-btns">
@@ -844,7 +844,7 @@ function BlogPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
-          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Codelabs AI.</p>
+          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
@@ -954,7 +954,7 @@ function NewsPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News</h2>
-          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Codelabs AI.</p>
+          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
@@ -1253,7 +1253,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1.5rem'}}>
           <div>
             <h1>✦ MyOps Dashboard</h1>
-            <p>Your personalised global opportunities, curated by Codelabs AI</p>
+            <p>Your personalised global opportunities, curated by Lumivo AI</p>
           </div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'.6rem'}}>
             <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
