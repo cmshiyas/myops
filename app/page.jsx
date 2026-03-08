@@ -272,6 +272,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [usageData, setUsageData] = useState(null);
   const [billingDropdown, setBillingDropdown] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [subscriptionModal, setSubscriptionModal] = useState(null); // null | 'manage' | 'cancel' | 'downgrade'
@@ -363,14 +364,14 @@ export default function App() {
       };
       setProfile(normalised);
       if (p.plan) setUser(prev => prev ? { ...prev, plan: p.plan } : prev);
-      // Cache in localStorage for instant load next time
       try {
         localStorage.setItem('lumivo_profile_cache', JSON.stringify({
           profile: normalised, plan: p.plan, cachedAt: Date.now()
         }));
       } catch (_) {}
     }
-    // profile route now returns opportunities too
+    // Usage now bundled in the same response — set immediately
+    if (profileData?.usage) setUsageData(profileData.usage);
     const ops = profileData?.opportunities || opsData?.opportunities || [];
     if (ops.length > 0) setOpportunities(ops);
   }
@@ -643,7 +644,7 @@ export default function App() {
         {page === 'pricing' && <PricingPage setModal={setModal} user={user} navigateTo={navigateTo} />}
         {page === 'news' && <NewsPage />}
         {page === 'profile' && (user
-          ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} userPlan={user?.plan || 'silver'} />
+          ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} userPlan={user?.plan || 'silver'} initialUsage={usageData} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
         )}
         {page === 'myops' && (user
@@ -1004,7 +1005,7 @@ function NewsPage() {
 }
 
 // ─── PROFILE ─────────────────────────────────────────────────────────────────
-function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, setLoadingOps }) {
+function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, setLoadingOps, initialUsage }) {
   const emptyForm = { country:'',city:'',age:'',education:'',field:'',experience:'',skills:[],interests:[],languages:[],bio:'' };
 
   // Normalise a profile row from DB — Supabase can return null for array fields
@@ -1027,21 +1028,22 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState(null);
   const [limitError, setLimitError] = useState(null);
-  const [usage, setUsage] = useState(null);
+  const [usage, setUsage] = useState(initialUsage || null);
 
-  useEffect(() => {
-    if (user?.id) {
-      fetch(`/api/usage?userId=${user.id}`)
-        .then(r => r.json())
-        .then(d => { if (!d.error) setUsage(d); })
-        .catch(() => {});
-    }
-  }, [user?.id]);
+  // initialUsage comes pre-loaded with the profile — no extra fetch needed on mount
+  // Only re-fetch after an action that changes token usage (save, analyze)
+  function refreshUsage() {
+    if (!user?.id) return;
+    fetch(`/api/usage?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => { if (!d.error) setUsage(d); })
+      .catch(() => {});
+  }
 
-  // Sync form when profile loads from DB after component already mounted (e.g. after re-login)
-  useEffect(() => {
-    if (profile) setForm(normalise(profile));
-  }, [profile]);
+  // Sync form when profile prop changes (e.g. after re-login)
+  useEffect(() => { if (profile) setForm(normalise(profile)); }, [profile]);
+  // Sync usage when parent refreshes it
+  useEffect(() => { if (initialUsage) setUsage(initialUsage); }, [initialUsage]);
 
   const completeness = [form.country,form.age,form.education,form.field,form.skills.length,form.interests.length].filter(Boolean).length;
   const pct = Math.round((completeness/6)*100);
@@ -1060,7 +1062,6 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
       const data = await res.json();
       if (data.error) { setSaveErr(data.error); return; }
       setProfile(form);
-      // Bust localStorage cache so next session loads fresh
       try { localStorage.removeItem('lumivo_profile_cache'); } catch (_) {}
       setSaved(true); setTimeout(()=>setSaved(false),3000);
     } catch(_) { setSaveErr('Failed to save. Please try again.'); }
