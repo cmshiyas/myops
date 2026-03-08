@@ -684,7 +684,7 @@ export default function App() {
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
         )}
         {page === 'myops' && (user
-          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} userPlan={user?.plan || 'silver'} setUsageData={setUsageData} />
+          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} userPlan={user?.plan || 'silver'} usageData={usageData} setUsageData={setUsageData} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your opportunities.</p></div>
         )}
       </div>
@@ -1253,7 +1253,7 @@ const PLAN_LIMITS = {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user, userPlan, setUsageData }) {
+function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user, userPlan, usageData, setUsageData }) {
   const filters = ['All','Job','Education','Migration'];
   const plan = PLAN_LIMITS[userPlan] || PLAN_LIMITS.silver;
   const [rerunError, setRerunError] = useState(null);
