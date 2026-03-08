@@ -1,13 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
-const MONTHLY_TOKEN_LIMIT = parseInt(process.env.TOKEN_LIMIT_PER_MONTH || '50000', 10);
+// Per-plan token limits — single source of truth on the server
+const PLAN_TOKEN_LIMITS = {
+  silver:   0,
+  gold:     2000,
+  platinum: 20000,
+};
 
-// Server-only Supabase client — uses service role key, never exposed to browser
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Missing Supabase server env vars');
   return createClient(url, key, { auth: { persistSession: false } });
+}
+
+async function getUserPlan(supabase, userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('plan')
+    .eq('user_id', userId)
+    .single();
+  if (error) throw new Error('Could not verify user plan');
+  return data?.plan || 'silver';
 }
 
 async function getUsageThisMonth(supabase, userId) {
@@ -26,8 +40,8 @@ async function getUsageThisMonth(supabase, userId) {
 async function recordUsage(supabase, userId, monthKey, newTokens) {
   await supabase.rpc('increment_token_usage', {
     p_user_id: userId,
-    p_month: monthKey,
-    p_tokens: newTokens,
+    p_month:   monthKey,
+    p_tokens:  newTokens,
   });
 }
 
@@ -39,37 +53,63 @@ export async function POST(req) {
       return Response.json({ error: 'No profile data provided' }, { status: 400 });
     }
 
-    // Verify ANTHROPIC_API_KEY is present (server-only — never sent to browser)
+    // ── GAP 1 FIX: userId is mandatory — no anonymous analysis ───────────────
+    if (!userId) {
+      return Response.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error('ANTHROPIC_API_KEY is not set');
       return Response.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    // ── Token limit check ────────────────────────────────────────────────────
-    let supabase = null;
-    let monthKey = null;
+    const supabase = getServerSupabase();
 
-    if (userId) {
-      try {
-        supabase = getServerSupabase();
-        const usage = await getUsageThisMonth(supabase, userId);
-        monthKey = usage.monthKey;
-
-        if (usage.tokens >= MONTHLY_TOKEN_LIMIT) {
-          return Response.json({
-            error: 'limit_reached',
-            message: `You have used all ${MONTHLY_TOKEN_LIMIT.toLocaleString()} tokens for this month. Resets on the 1st of next month.`,
-            tokensUsed: usage.tokens,
-            tokenLimit: MONTHLY_TOKEN_LIMIT,
-          }, { status: 429 });
-        }
-      } catch (e) {
-        console.warn('Token check failed (non-blocking):', e.message);
-      }
+    // ── GAP 2 FIX: Fetch plan from DB — never trust client-supplied plan ─────
+    let plan;
+    try {
+      plan = await getUserPlan(supabase, userId);
+    } catch (e) {
+      console.error('Plan fetch failed:', e.message);
+      return Response.json({ error: 'Could not verify your plan. Please try again.' }, { status: 403 });
     }
 
-    // ── Call Anthropic API (server-side only) ────────────────────────────────
+    const tokenLimit = PLAN_TOKEN_LIMITS[plan] ?? 0;
+
+    // ── GAP 3 FIX: Silver plan blocked server-side, not just in UI ───────────
+    if (tokenLimit === 0) {
+      return Response.json({
+        error: 'limit_reached',
+        message: 'Upgrade to Gold or Platinum to run AI analysis.',
+        plan,
+        tokenLimit: 0,
+      }, { status: 403 });
+    }
+
+    // ── Check monthly usage against plan limit ───────────────────────────────
+    let monthKey;
+    let currentTokens;
+    try {
+      const usage = await getUsageThisMonth(supabase, userId);
+      monthKey      = usage.monthKey;
+      currentTokens = usage.tokens;
+    } catch (e) {
+      console.error('Usage fetch failed:', e.message);
+      return Response.json({ error: 'Could not check token usage. Please try again.' }, { status: 500 });
+    }
+
+    if (currentTokens >= tokenLimit) {
+      return Response.json({
+        error: 'limit_reached',
+        message: `You've used all ${tokenLimit.toLocaleString()} tokens for this month (${plan} plan). Resets on the 1st of next month.`,
+        tokensUsed: currentTokens,
+        tokenLimit,
+        plan,
+      }, { status: 429 });
+    }
+
+    // ── Call Anthropic API ───────────────────────────────────────────────────
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -106,18 +146,18 @@ Every url must start with https://. Make all opportunities realistic and tailore
     }
 
     const data = await response.json();
-    const raw = data.content?.map((i) => i.text || '').join('').trim();
+    const raw  = data.content?.map((i) => i.text || '').join('').trim();
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const opportunities = JSON.parse(clean);
 
     // ── Record actual tokens used ────────────────────────────────────────────
     const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-    if (userId && supabase && monthKey && tokensUsed > 0) {
+    if (tokensUsed > 0) {
       try { await recordUsage(supabase, userId, monthKey, tokensUsed); }
       catch (e) { console.warn('Failed to record usage:', e.message); }
     }
 
-    return Response.json({ opportunities, usage: { tokensUsed, tokenLimit: MONTHLY_TOKEN_LIMIT } });
+    return Response.json({ opportunities, usage: { tokensUsed, tokenLimit, plan } });
 
   } catch (err) {
     console.error('Analyze route error:', err);
