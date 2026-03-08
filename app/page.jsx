@@ -798,7 +798,7 @@ function BlogPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
-          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Codelabs AI.</p>
+          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
@@ -1207,7 +1207,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1.5rem'}}>
           <div>
             <h1>✦ MyOps Dashboard</h1>
-            <p>Your personalised global opportunities, curated by Codelabs AI</p>
+            <p>Your personalised global opportunities, curated by Lumivo AI</p>
           </div>
           <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'.6rem'}}>
             <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
