@@ -713,7 +713,7 @@ function HomePage({ setPage, setModal, user }) {
   return (
     <>
       <div className="hero">
-        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery by Codelabs</p>
+        <p className="hero-eyebrow">✦ AI-Powered Global Opportunity Discovery by Lumivo</p>
         <h1>Your Skills Deserve a <em>World-Class</em> Stage</h1>
         <p className="hero-sub">Create your profile. Let our AI study it. Discover jobs, scholarships, and migration pathways tailored exactly to you — worldwide.</p>
         <div className="hero-btns">
@@ -908,7 +908,7 @@ function NewsPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News</h2>
-          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Codelabs AI.</p>
+          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
           {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
