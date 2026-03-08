@@ -1,5 +1,20 @@
-export async function GET() {
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+let cache = { items: null, generatedAt: null };
+
+export async function GET(req) {
   try {
+    const now = Date.now();
+    const forceRefresh = new URL(req.url).searchParams.get('refresh') === '1';
+
+    if (!forceRefresh && cache.items && cache.generatedAt && (now - cache.generatedAt) < CACHE_TTL_MS) {
+      return Response.json({
+        items: cache.items,
+        generatedAt: new Date(cache.generatedAt).toISOString(),
+        cached: true,
+      });
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return Response.json({ error: 'Not configured' }, { status: 500 });
 
@@ -56,9 +71,14 @@ Use a different url for each of the 6 news items.`,
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const items = JSON.parse(clean);
 
-    return Response.json({ items, generatedAt: new Date().toISOString() });
+    cache = { items, generatedAt: now };
+
+    return Response.json({ items, generatedAt: new Date(now).toISOString(), cached: false });
   } catch (err) {
     console.error('News generation error:', err);
+    if (cache.items) {
+      return Response.json({ items: cache.items, generatedAt: new Date(cache.generatedAt).toISOString(), cached: true, stale: true });
+    }
     return Response.json({ error: 'Failed to generate news' }, { status: 500 });
   }
 }

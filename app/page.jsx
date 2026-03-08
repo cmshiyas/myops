@@ -799,44 +799,34 @@ function BlogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [fromCache, setFromCache] = useState(false);
 
-  useEffect(() => {
-    // Check sessionStorage cache first — avoid regenerating on every tab switch
-    try {
-      const cached = sessionStorage.getItem('blog_cache');
-      if (cached) {
-        const { posts: p, generatedAt: g, cachedAt } = JSON.parse(cached);
-        // Use cache if less than 10 minutes old
-        if (Date.now() - cachedAt < 10 * 60 * 1000) {
-          setPosts(p); setGeneratedAt(g); setLoading(false); return;
-        }
-      }
-    } catch (_) {}
+  useEffect(() => { loadPosts(false); }, []);
 
-    fetch('/api/blog')
+  function loadPosts(forceRefresh) {
+    setLoading(true); setError(null); setPosts([]);
+    fetch(`/api/blog${forceRefresh ? '?refresh=1' : ''}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); return; }
         setPosts(d.posts);
         setGeneratedAt(d.generatedAt);
-        try { sessionStorage.setItem('blog_cache', JSON.stringify({ posts: d.posts, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
+        setFromCache(d.cached || false);
       })
       .catch(() => setError('Failed to load posts'))
       .finally(() => setLoading(false));
-  }, []);
+  }
 
-  function handleRefresh() {
-    try { sessionStorage.removeItem('blog_cache'); } catch (_) {}
-    setLoading(true); setError(null); setPosts([]);
-    fetch('/api/blog')
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) { setError(d.error); return; }
-        setPosts(d.posts); setGeneratedAt(d.generatedAt);
-        try { sessionStorage.setItem('blog_cache', JSON.stringify({ posts: d.posts, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
-      })
-      .catch(() => setError('Failed to load posts'))
-      .finally(() => setLoading(false));
+  function handleRefresh() { loadPosts(true); }
+
+  // Format how long ago content was generated
+  function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs  = Math.floor(diff / 3600000);
+    if (hrs >= 1) return `${hrs}h ago`;
+    if (mins >= 1) return `${mins}m ago`;
+    return 'just now';
   }
 
   return (
@@ -844,11 +834,16 @@ function BlogPage() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
           <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
-          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — generated fresh by Lumivo AI.</p>
+          <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — curated by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
-          {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
-          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?.6:1}}>
+          {generatedAt && (
+            <span style={{fontSize:'.72rem',color:'var(--muted)',display:'flex',alignItems:'center',gap:'.35rem'}}>
+              {fromCache && <span style={{background:'rgba(201,168,76,.12)',color:'var(--gold)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:600}}>cached</span>}
+              Updated {timeAgo(generatedAt)}
+            </span>
+          )}
+          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?0.6:1}}>
             {loading ? '…' : '↻ Refresh'}
           </button>
         </div>
@@ -912,42 +907,9 @@ function NewsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [fromCache, setFromCache] = useState(false);
 
-  useEffect(() => {
-    try {
-      const cached = sessionStorage.getItem('news_cache');
-      if (cached) {
-        const { items: it, generatedAt: g, cachedAt } = JSON.parse(cached);
-        if (Date.now() - cachedAt < 10 * 60 * 1000) {
-          setItems(it); setGeneratedAt(g); setLoading(false); return;
-        }
-      }
-    } catch (_) {}
-
-    fetch('/api/news')
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) { setError(d.error); return; }
-        setItems(d.items); setGeneratedAt(d.generatedAt);
-        try { sessionStorage.setItem('news_cache', JSON.stringify({ items: d.items, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
-      })
-      .catch(() => setError('Failed to load news'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  function handleRefresh() {
-    try { sessionStorage.removeItem('news_cache'); } catch (_) {}
-    setLoading(true); setError(null); setItems([]);
-    fetch('/api/news')
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) { setError(d.error); return; }
-        setItems(d.items); setGeneratedAt(d.generatedAt);
-        try { sessionStorage.setItem('news_cache', JSON.stringify({ items: d.items, generatedAt: d.generatedAt, cachedAt: Date.now() })); } catch (_) {}
-      })
-      .catch(() => setError('Failed to load news'))
-      .finally(() => setLoading(false));
-  }
+  useEffect(() => { loadNews(false); }, []);
 
   return (
     <div className="section">
@@ -957,7 +919,12 @@ function NewsPage() {
           <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
-          {generatedAt && <span style={{fontSize:'.72rem',color:'var(--muted)'}}>Generated {new Date(generatedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>}
+          {generatedAt && (
+            <span style={{fontSize:'.72rem',color:'var(--muted)',display:'flex',alignItems:'center',gap:'.35rem'}}>
+              {fromCache && <span style={{background:'rgba(201,168,76,.12)',color:'var(--gold)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:600}}>cached</span>}
+              Updated {timeAgo(generatedAt)}
+            </span>
+          )}
           <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?.6:1}}>
             {loading ? '…' : '↻ Refresh'}
           </button>

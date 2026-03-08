@@ -1,5 +1,23 @@
-export async function GET() {
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// Server-side in-memory cache — shared across all users, persists across requests
+// (Vercel serverless: reused within the same function instance)
+let cache = { posts: null, generatedAt: null };
+
+export async function GET(req) {
   try {
+    // Serve from cache if fresh
+    const now = Date.now();
+    const forceRefresh = new URL(req.url).searchParams.get('refresh') === '1';
+
+    if (!forceRefresh && cache.posts && cache.generatedAt && (now - cache.generatedAt) < CACHE_TTL_MS) {
+      return Response.json({
+        posts: cache.posts,
+        generatedAt: new Date(cache.generatedAt).toISOString(),
+        cached: true,
+      });
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return Response.json({ error: 'Not configured' }, { status: 500 });
 
@@ -59,9 +77,16 @@ Use a different url for each of the 6 posts. Write titles and excerpts that are 
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const posts = JSON.parse(clean);
 
-    return Response.json({ posts, generatedAt: new Date().toISOString() });
+    // Store in server cache
+    cache = { posts, generatedAt: now };
+
+    return Response.json({ posts, generatedAt: new Date(now).toISOString(), cached: false });
   } catch (err) {
     console.error('Blog generation error:', err);
+    // Return stale cache rather than error if available
+    if (cache.posts) {
+      return Response.json({ posts: cache.posts, generatedAt: new Date(cache.generatedAt).toISOString(), cached: true, stale: true });
+    }
     return Response.json({ error: 'Failed to generate blog posts' }, { status: 500 });
   }
 }
