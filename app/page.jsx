@@ -258,6 +258,15 @@ const FALLBACK_OPS = [
   { id: 8, title: 'Chevening Scholarship 2026/27', org: 'UK Foreign Commonwealth Office', type: 'education', country: 'United Kingdom', description: "UK government's flagship scholarship for emerging global leaders to pursue a master's in the UK.", matchScore: 82, deadline: 'Nov 5, 2026', requirements: ['2 yrs work exp', 'Leadership potential', 'Return to home country'], url: 'https://www.chevening.org/scholarships/' },
 ];
 
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// Stable hash of the fields that affect opportunity results
+function profileHash(p) {
+  if (!p) return '';
+  return [p.country, p.city, p.age, p.education, p.field, p.experience,
+    (p.skills||[]).join(','), (p.interests||[]).join(','), (p.languages||[]).join(','), p.bio
+  ].join('|');
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState('home');
@@ -365,32 +374,58 @@ export default function App() {
       setProfile(normalised);
       if (p.plan) setUser(prev => prev ? { ...prev, plan: p.plan } : prev);
       try {
+        // Opportunities saved separately so they survive independent rerun updates
+        const existingOps = JSON.parse(localStorage.getItem('lumivo_ops_cache') || '[]');
         localStorage.setItem('lumivo_profile_cache', JSON.stringify({
           profile: normalised, plan: p.plan, cachedAt: Date.now()
         }));
+        // Don't overwrite ops cache here — handled below in applyProfileData
+        void existingOps;
       } catch (_) {}
     }
     // Usage now bundled in the same response — set immediately
     if (profileData?.usage) setUsageData(profileData.usage);
     const ops = profileData?.opportunities || opsData?.opportunities || [];
-    if (ops.length > 0) setOpportunities(ops);
+    if (ops.length > 0) {
+      setOpportunities(ops);
+      // Cache ops in localStorage for instant MyOps load next visit
+      try {
+        localStorage.setItem('lumivo_ops_cache', JSON.stringify({
+          opportunities: ops, cachedAt: Date.now(), profileHash: profileHash(profileData?.profile)
+        }));
+      } catch (_) {}
+    }
   }
 
   async function loadProfile(userId) {
-    // 1. Show cached profile instantly while fetching fresh data
+    // 1. Restore profile AND opportunities instantly from localStorage
     try {
-      const raw = localStorage.getItem('lumivo_profile_cache');
-      if (raw) {
-        const { profile: cached, plan, cachedAt } = JSON.parse(raw);
-        const AGE_LIMIT = 30 * 60 * 1000; // 30 minutes
+      const rawProfile = localStorage.getItem('lumivo_profile_cache');
+      const rawOps     = localStorage.getItem('lumivo_ops_cache');
+      const AGE_LIMIT  = 30 * 60 * 1000; // 30 minutes
+
+      if (rawProfile) {
+        const { profile: cached, plan, cachedAt } = JSON.parse(rawProfile);
         if (Date.now() - cachedAt < AGE_LIMIT) {
           setProfile(cached);
           if (plan) setUser(prev => prev ? { ...prev, plan } : prev);
         }
       }
+
+      if (rawOps && rawProfile) {
+        const { opportunities: cachedOps, cachedAt, profileHash: cachedHash } = JSON.parse(rawOps);
+        const { profile: cachedProfile } = JSON.parse(rawProfile);
+        const currentHash = profileHash(cachedProfile);
+        const withinTTL   = Date.now() - cachedAt < 24 * 60 * 60 * 1000; // 24 hours
+        const profileSame = cachedHash === currentHash;
+        // Only use cache if profile hasn't changed AND within 24hr TTL
+        if (cachedOps?.length > 0 && withinTTL && profileSame) {
+          setOpportunities(cachedOps);
+        }
+      }
     } catch (_) {}
 
-    // 2. Fetch fresh data in the background — profile route now returns both
+    // 2. Fetch fresh data silently in background — updates if anything changed
     try {
       const res = await fetch(`/api/profile?userId=${userId}`);
       const data = await res.json();
@@ -462,6 +497,7 @@ export default function App() {
     try {
       localStorage.removeItem('lastPage');
       localStorage.removeItem('lumivo_profile_cache');
+      localStorage.removeItem('lumivo_ops_cache');
     } catch (_) {}
   }
 
@@ -1087,7 +1123,12 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
       const data = await res.json();
       if (data.error) { setSaveErr(data.error); return; }
       setProfile(form);
-      try { localStorage.removeItem('lumivo_profile_cache'); } catch (_) {}
+      try {
+        // Bust profile cache so next load gets fresh data
+        localStorage.removeItem('lumivo_profile_cache');
+        // Bust ops cache — profile changed so existing results are stale
+        localStorage.removeItem('lumivo_ops_cache');
+      } catch (_) {}
       setSaved(true); setTimeout(()=>setSaved(false),3000);
     } catch(_) { setSaveErr('Failed to save. Please try again.'); }
     finally { setSaving(false); }
@@ -1097,20 +1138,23 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
     await handleSave();
     setPage('myops');
     setLoadingOps(true);
-    setOpportunities([]);
+    // Don't clear existing ops — keep cached ones visible while new ones load
     const profileSummary = `Location: ${form.city}, ${form.country}\nAge: ${form.age}\nEducation: ${form.education} in ${form.field}\nExperience: ${form.experience} years\nSkills: ${form.skills.join(', ')}\nInterests: ${form.interests.join(', ')}\nLanguages: ${form.languages.join(', ')}\nBio: ${form.bio}`;
     try {
       const res = await fetch('/api/analyze', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ profileSummary, userId: user.id }) });
       const data = await res.json();
       if (data.error === 'limit_reached') {
-        setOpportunities([]);
         setLimitError(data.message);
         return;
       }
       setLimitError(null);
       const ops = data.opportunities || FALLBACK_OPS;
       setOpportunities(ops);
-      // Persist to DB so they survive re-login
+      // Cache locally so MyOps loads instantly next visit
+      try {
+        localStorage.setItem('lumivo_ops_cache', JSON.stringify({ opportunities: ops, cachedAt: Date.now(), profileHash: profileHash(form) }));
+      } catch (_) {}
+      // Persist to DB
       fetch('/api/opportunities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1228,7 +1272,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
     if (!profile || loadingOps) return;
     setRerunError(null);
     setLoadingOps(true);
-    setOpportunities([]);
+    // Keep existing ops visible while refreshing
     const profileSummary = `Location: ${profile.city}, ${profile.country}\nAge: ${profile.age}\nEducation: ${profile.education} in ${profile.field}\nExperience: ${profile.experience} years\nSkills: ${(profile.skills||[]).join(', ')}\nInterests: ${(profile.interests||[]).join(', ')}\nLanguages: ${(profile.languages||[]).join(', ')}\nBio: ${profile.bio}`;
     try {
       const res = await fetch('/api/analyze', {
@@ -1239,13 +1283,18 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
       const data = await res.json();
       if (data.error === 'limit_reached') {
         setRerunError(data.message || 'Monthly token limit reached. Upgrade your plan for more analyses.');
-        setOpportunities([]);
-        return;
+        return; // Keep existing ops visible
       }
       if (data.error) { setRerunError(data.error); return; }
       const ops = data.opportunities || [];
       setOpportunities(ops);
-      // Persist updated results
+      // Update localStorage cache so MyOps loads instantly next visit
+      try {
+        localStorage.setItem('lumivo_ops_cache', JSON.stringify({
+          opportunities: ops, cachedAt: Date.now(), profileHash: profileHash(profile)
+        }));
+      } catch (_) {}
+      // Persist to DB
       fetch('/api/opportunities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
