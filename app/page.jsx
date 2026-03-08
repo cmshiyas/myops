@@ -1249,9 +1249,9 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
 // Plan limits config
 // Silver: 1 per category (3 total), Gold: 10 total, Platinum: all 20
 const PLAN_LIMITS = {
-  silver:   { maxOpsPerCat: 1, maxOps: null, canRerun: false, tokenLimit: 0,     label: 'Silver',   color: '#9ca3af' },
-  gold:     { maxOpsPerCat: null, maxOps: 10, canRerun: true,  tokenLimit: 2000,  label: 'Gold',     color: '#c9a84c' },
-  platinum: { maxOpsPerCat: null, maxOps: null, canRerun: true, tokenLimit: 20000, label: 'Platinum', color: '#7dd3fc' },
+  silver:   { maxOpsPerCat: 1, maxOps: null, canRerun: false, tokenLimit: 1000,  label: 'Silver',   color: '#9ca3af' },
+  gold:     { maxOpsPerCat: null, maxOps: 10, canRerun: true,  tokenLimit: 5000,  label: 'Gold',     color: '#c9a84c' },
+  platinum: { maxOpsPerCat: null, maxOps: null, canRerun: true, tokenLimit: 15000, label: 'Platinum', color: '#7dd3fc' },
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -1511,7 +1511,7 @@ function PricingPage({ setModal, user, navigateTo }) {
         { text: 'Blog & News access', on: true },
         { text: 'Re-run AI analysis', on: false },
         { text: '10+ opportunity results', on: false },
-        { text: 'Token allowance', on: false },
+        { text: '1,000 tokens / month', on: true },
       ],
     },
     {
@@ -1530,7 +1530,7 @@ function PricingPage({ setModal, user, navigateTo }) {
         { text: 'Profile builder', on: true },
         { text: 'Blog & News access', on: true },
         { text: 'Re-run AI analysis anytime', on: true },
-        { text: '2,000 tokens / month', on: true },
+        { text: '5,000 tokens / month', on: true },
         { text: 'Priority support', on: false },
       ],
     },
@@ -1549,7 +1549,7 @@ function PricingPage({ setModal, user, navigateTo }) {
         { text: 'Profile builder', on: true },
         { text: 'Blog & News access', on: true },
         { text: 'Re-run AI analysis anytime', on: true },
-        { text: '20,000 tokens / month', on: true },
+        { text: '15,000 tokens / month', on: true },
         { text: 'Priority support', on: true },
       ],
     },
@@ -1563,23 +1563,57 @@ function PricingPage({ setModal, user, navigateTo }) {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const stripeResult = params.get('stripe');
+      window.history.replaceState({}, '', '/');
+
       if (stripeResult === 'success') {
         setStripeMsg({ type: 'success', text: '🎉 Payment successful! Your plan has been upgraded.' });
-        // Clean the URL and navigate to pricing page
-        window.history.replaceState({}, '', '/');
         navigateTo('pricing');
+        // Bust caches so new plan is loaded fresh from DB
+        try {
+          localStorage.removeItem('lumivo_profile_cache');
+          localStorage.removeItem('lumivo_ops_cache');
+        } catch (_) {}
+        // Re-fetch profile so plan badge + limits update immediately
+        // Stripe webhooks can take 1-3s — poll up to 3 times with delay
+        if (user?.id) {
+          const pollPlan = (attempts) => {
+            fetch(`/api/profile?userId=${user.id}`)
+              .then(r => r.json())
+              .then(data => {
+                const newPlan = data.profile?.plan;
+                if (newPlan && newPlan !== 'silver') {
+                  setUser(prev => prev ? { ...prev, plan: newPlan } : prev);
+                } else if (attempts > 0) {
+                  // Webhook may not have fired yet — retry after 2s
+                  setTimeout(() => pollPlan(attempts - 1), 2000);
+                }
+              })
+              .catch(() => {});
+          };
+          setTimeout(() => pollPlan(3), 1500);
+        }
       }
       if (stripeResult === 'canceled') {
         setStripeMsg({ type: 'error', text: 'Payment cancelled. You have not been charged.' });
-        window.history.replaceState({}, '', '/');
         navigateTo('pricing');
       }
       if (stripeResult === 'portal') {
-        window.history.replaceState({}, '', '/');
         navigateTo('pricing');
+        // Re-fetch in case plan changed via portal (downgrade/cancel)
+        try { localStorage.removeItem('lumivo_profile_cache'); } catch (_) {}
+        if (user?.id) {
+          fetch(`/api/profile?userId=${user.id}`)
+            .then(r => r.json())
+            .then(data => {
+              if (data.profile?.plan) {
+                setUser(prev => prev ? { ...prev, plan: data.profile.plan } : prev);
+              }
+            })
+            .catch(() => {});
+        }
       }
     }
-  }, []);
+  }, [user?.id]);
 
   async function handleCta(plan) {
     if (!user) { setModal('signup'); return; }

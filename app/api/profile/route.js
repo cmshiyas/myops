@@ -12,7 +12,7 @@ function getSupabase() {
   return _supabase;
 }
 
-const PLAN_TOKEN_LIMITS = { silver: 0, gold: 2000, platinum: 20000 };
+const PLAN_TOKEN_LIMITS = { silver: 1000, gold: 5000, platinum: 15000 };
 
 function calcUsageStats(tokensUsed, plan) {
   const tokenLimit = PLAN_TOKEN_LIMITS[plan] || 0;

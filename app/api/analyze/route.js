@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 const PLAN_TOKEN_LIMITS = {
-  silver:   200,
-  gold:     2000,
-  platinum: 20000,
+  silver:   1000,
+  gold:     5000,
+  platinum: 15000,
 };
 
 // Trusted URL pools per category — Claude must pick from these
