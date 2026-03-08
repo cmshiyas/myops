@@ -931,6 +931,31 @@ function NewsPage() {
 
   useEffect(() => { loadNews(false); }, []);
 
+  function loadNews(forceRefresh) {
+    setLoading(true); setError(null); setItems([]);
+    fetch(`/api/news${forceRefresh ? '?refresh=1' : ''}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setItems(d.items);
+        setGeneratedAt(d.generatedAt);
+        setFromCache(d.cached || false);
+      })
+      .catch(() => setError('Failed to load news'))
+      .finally(() => setLoading(false));
+  }
+
+  function handleRefresh() { loadNews(true); }
+
+  function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs  = Math.floor(diff / 3600000);
+    if (hrs >= 1) return `${hrs}h ago`;
+    if (mins >= 1) return `${mins}m ago`;
+    return 'just now';
+  }
+
   return (
     <div className="section">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
@@ -945,7 +970,7 @@ function NewsPage() {
               Updated {timeAgo(generatedAt)}
             </span>
           )}
-          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?.6:1}}>
+          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?0.6:1}}>
             {loading ? '…' : '↻ Refresh'}
           </button>
         </div>
