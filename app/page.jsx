@@ -684,7 +684,7 @@ export default function App() {
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
         )}
         {page === 'myops' && (user
-          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} userPlan={user?.plan || 'silver'} />
+          ? <DashboardPage opportunities={opportunities} loadingOps={loadingOps} dashFilter={dashFilter} setDashFilter={setDashFilter} profile={profile} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} setPage={navigateTo} user={user} userPlan={user?.plan || 'silver'} setUsageData={setUsageData} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your opportunities.</p></div>
         )}
       </div>
@@ -1253,20 +1253,10 @@ const PLAN_LIMITS = {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user, userPlan }) {
+function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, profile, setOpportunities, setLoadingOps, setPage, user, userPlan, setUsageData }) {
   const filters = ['All','Job','Education','Migration'];
   const plan = PLAN_LIMITS[userPlan] || PLAN_LIMITS.silver;
-  const [usage, setUsage] = useState(null);
   const [rerunError, setRerunError] = useState(null);
-
-  useEffect(() => {
-    if (user?.id) {
-      fetch(`/api/usage?userId=${user.id}`)
-        .then(r => r.json())
-        .then(d => { if (!d.error) setUsage(d); })
-        .catch(() => {});
-    }
-  }, [user?.id, loadingOps]); // refresh usage after a rerun too
 
   async function handleRerun() {
     if (!profile || loadingOps) return;
@@ -1288,6 +1278,8 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
       if (data.error) { setRerunError(data.error); return; }
       const ops = data.opportunities || [];
       setOpportunities(ops);
+      // Update usage meter instantly from the response — no separate fetch needed
+      if (data.usage) setUsageData(data.usage);
       // Update localStorage cache so MyOps loads instantly next visit
       try {
         localStorage.setItem('lumivo_ops_cache', JSON.stringify({
@@ -1356,18 +1348,18 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
               <span style={{fontSize:'.82rem',fontWeight:700,color:plan.color,background:'rgba(255,255,255,0.08)',padding:'.2rem .7rem',borderRadius:'100px',border:`1px solid ${plan.color}44`}}>{plan.label}</span>
               <button onClick={()=>setPage('pricing')} style={{fontSize:'.72rem',color:'var(--gold)',background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Upgrade</button>
             </div>
-            {usage && (
+            {usageData && (
               <div style={{minWidth:'220px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'.3rem'}}>
                   <span style={{fontSize:'.72rem',letterSpacing:'.08em',textTransform:'uppercase',color:'var(--muted)'}}>AI Tokens</span>
-                  <span style={{fontSize:'.82rem',fontWeight:700,color:usage.percentUsed>=90?'var(--rust)':usage.percentUsed>=70?'#c9893c':'var(--gold)'}}>
-                    {usage.tokensUsed.toLocaleString()} <span style={{fontWeight:400,color:'var(--muted)'}}>/ {usage.tokenLimit.toLocaleString()}</span>
+                  <span style={{fontSize:'.82rem',fontWeight:700,color:usageData.percentUsed>=90?'var(--rust)':usageData.percentUsed>=70?'#c9893c':'var(--gold)'}}>
+                    {usageData.tokensUsed.toLocaleString()} <span style={{fontWeight:400,color:'var(--muted)'}}>/ {usageData.tokenLimit.toLocaleString()}</span>
                   </span>
                 </div>
                 <div style={{height:'6px',background:'rgba(255,255,255,0.1)',borderRadius:'3px',overflow:'hidden'}}>
-                  <div style={{height:'100%',borderRadius:'3px',width:`${usage.percentUsed}%`,background:usage.percentUsed>=90?'var(--rust)':usage.percentUsed>=70?'#c9893c':'var(--gold)',transition:'width .5s'}}/>
+                  <div style={{height:'100%',borderRadius:'3px',width:`${usageData.percentUsed}%`,background:usageData.percentUsed>=90?'var(--rust)':usageData.percentUsed>=70?'#c9893c':'var(--gold)',transition:'width .5s'}}/>
                 </div>
-                <div style={{fontSize:'.68rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>Resets {usage.resetDate}</div>
+                <div style={{fontSize:'.68rem',color:'var(--muted)',marginTop:'.3rem',textAlign:'right'}}>Resets {usageData.resetDate}</div>
               </div>
             )}
           </div>

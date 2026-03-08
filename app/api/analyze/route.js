@@ -231,7 +231,12 @@ Each item must have exactly these fields:
       catch (e) { console.warn('Failed to record usage:', e.message); }
     }
 
-    return Response.json({ opportunities, usage: { tokensUsed, tokenLimit, plan } });
+    const totalUsed   = currentTokens + tokensUsed;
+    const percentUsed = tokenLimit > 0 ? Math.min(100, Math.round((totalUsed / tokenLimit) * 100)) : 0;
+    const now2        = new Date();
+    const resetDate   = new Date(now2.getFullYear(), now2.getMonth() + 1, 1)
+                          .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return Response.json({ opportunities, usage: { tokensUsed: totalUsed, tokenLimit, percentUsed, resetDate, plan } });
 
   } catch (err) {
     console.error('Analyze route error:', err);
