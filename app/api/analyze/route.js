@@ -1,17 +1,81 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Per-plan token limits — single source of truth on the server
 const PLAN_TOKEN_LIMITS = {
   silver:   0,
   gold:     2000,
   platinum: 20000,
 };
 
+// Trusted URL pools per category — Claude must pick from these
+const TRUSTED_URLS = {
+  job: [
+    'https://www.linkedin.com/jobs/',
+    'https://www.indeed.com/',
+    'https://www.glassdoor.com/Job/index.htm',
+    'https://careers.google.com/',
+    'https://www.amazon.jobs/',
+    'https://careers.microsoft.com/',
+    'https://www.lifeatspotify.com/jobs',
+    'https://www.metacareers.com/',
+    'https://grab.careers/',
+    'https://boards.greenhouse.io/',
+    'https://jobs.lever.co/',
+    'https://deepmind.google/about/careers/',
+    'https://www.shopify.com/careers',
+    'https://stripe.com/jobs',
+    'https://www.airbnb.com/careers',
+    'https://jobs.netflix.com/',
+    'https://www.apple.com/careers/',
+    'https://careers.ibm.com/',
+    'https://www.salesforce.com/company/careers/',
+    'https://careers.adobe.com/',
+  ],
+  education: [
+    'https://www.chevening.org/scholarships/',
+    'https://www.gatescambridge.org/apply/',
+    'https://www.daad.de/en/study-and-research-in-germany/scholarships/',
+    'https://www.topuniversities.com/student-info/scholarship-advice',
+    'https://www.fulbright.org.au/scholarships/',
+    'https://www.rhodeshouse.ox.ac.uk/scholarships/',
+    'https://www.commonwealthscholarships.ac.uk/',
+    'https://www.aauw.org/resources/programs/fellowships-grants/',
+    'https://www.australiaawards.gov.au/',
+    'https://erasmus.ec.europa.eu/opportunities',
+    'https://www.mastercardfdn.org/scholars-program/',
+    'https://www.adb.org/what-we-do/adb-japan-scholarship-program',
+    'https://www.oist.jp/admissions',
+    'https://www.kfas.org/en/',
+    'https://www.science-fellowship.eu/',
+  ],
+  migration: [
+    'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html',
+    'https://www.make-it-in-germany.com/en/visa-residence/types/opportunity-card',
+    'https://www.gov.uk/skilled-worker-visa',
+    'https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189',
+    'https://www.uscis.gov/working-in-the-united-states/h-1b-specialty-occupations',
+    'https://www.newzealandnow.govt.nz/visas/skilled-migrant-category-visa',
+    'https://www.dubai.ae/en/living-in-dubai/visas-and-immigration',
+    'https://www.mom.gov.sg/passes-and-permits/employment-pass',
+    'https://www.nfidigitalnomad.com/',
+    'https://visaguide.world/europe/portugal-visa/d8-digital-nomad/',
+    'https://www.mjp.gov.pt/APP/TipoVisto/GetTipoVisto/6',
+    'https://www.netherlandsworldwide.nl/visas-and-travel/visa-for-the-netherlands/highly-skilled-migrants',
+    'https://immigration.govt.nz/new-zealand-visas/apply-for-a-visa/about-visa/skilled-migrant-category-resident-visa',
+    'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/provincial-nominees.html',
+    'https://estonia.ee/e-residency/',
+  ],
+};
+
+let _supabase = null;
 function getServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Missing Supabase server env vars');
-  return createClient(url, key, { auth: { persistSession: false } });
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false } }
+    );
+  }
+  return _supabase;
 }
 
 async function getUserPlan(supabase, userId) {
@@ -49,67 +113,51 @@ export async function POST(req) {
   try {
     const { profileSummary, userId } = await req.json();
 
-    if (!profileSummary) {
-      return Response.json({ error: 'No profile data provided' }, { status: 400 });
-    }
-
-    // ── GAP 1 FIX: userId is mandatory — no anonymous analysis ───────────────
-    if (!userId) {
-      return Response.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    if (!profileSummary) return Response.json({ error: 'No profile data provided' }, { status: 400 });
+    if (!userId) return Response.json({ error: 'Authentication required' }, { status: 401 });
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY is not set');
-      return Response.json({ error: 'Server configuration error' }, { status: 500 });
-    }
+    if (!apiKey) return Response.json({ error: 'Server configuration error' }, { status: 500 });
 
     const supabase = getServerSupabase();
 
-    // ── GAP 2 FIX: Fetch plan from DB — never trust client-supplied plan ─────
+    // Fetch plan server-side — never trust client
     let plan;
-    try {
-      plan = await getUserPlan(supabase, userId);
-    } catch (e) {
-      console.error('Plan fetch failed:', e.message);
-      return Response.json({ error: 'Could not verify your plan. Please try again.' }, { status: 403 });
-    }
+    try { plan = await getUserPlan(supabase, userId); }
+    catch (e) { return Response.json({ error: 'Could not verify your plan.' }, { status: 403 }); }
 
     const tokenLimit = PLAN_TOKEN_LIMITS[plan] ?? 0;
-
-    // ── GAP 3 FIX: Silver plan blocked server-side, not just in UI ───────────
     if (tokenLimit === 0) {
       return Response.json({
         error: 'limit_reached',
         message: 'Upgrade to Gold or Platinum to run AI analysis.',
-        plan,
-        tokenLimit: 0,
+        plan, tokenLimit: 0,
       }, { status: 403 });
     }
 
-    // ── Check monthly usage against plan limit ───────────────────────────────
-    let monthKey;
-    let currentTokens;
+    // Check monthly usage
+    let monthKey, currentTokens;
     try {
       const usage = await getUsageThisMonth(supabase, userId);
-      monthKey      = usage.monthKey;
+      monthKey = usage.monthKey;
       currentTokens = usage.tokens;
     } catch (e) {
-      console.error('Usage fetch failed:', e.message);
-      return Response.json({ error: 'Could not check token usage. Please try again.' }, { status: 500 });
+      return Response.json({ error: 'Could not check token usage.' }, { status: 500 });
     }
 
     if (currentTokens >= tokenLimit) {
       return Response.json({
         error: 'limit_reached',
-        message: `You've used all ${tokenLimit.toLocaleString()} tokens for this month (${plan} plan). Resets on the 1st of next month.`,
-        tokensUsed: currentTokens,
-        tokenLimit,
-        plan,
+        message: `You've used all ${tokenLimit.toLocaleString()} tokens this month (${plan} plan). Resets on the 1st.`,
+        tokensUsed: currentTokens, tokenLimit, plan,
       }, { status: 429 });
     }
 
-    // ── Call Anthropic API ───────────────────────────────────────────────────
+    // Build trusted URL lists for the prompt
+    const jobUrls     = TRUSTED_URLS.job.map((u,i) => `${i+1}. ${u}`).join('\n');
+    const eduUrls     = TRUSTED_URLS.education.map((u,i) => `${i+1}. ${u}`).join('\n');
+    const migUrls     = TRUSTED_URLS.migration.map((u,i) => `${i+1}. ${u}`).join('\n');
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -119,23 +167,49 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system: `You are a global opportunity analyst. Given a user profile, identify 8 highly relevant opportunities across jobs, education, and migration.
+        max_tokens: 4000,
+        system: `You are a global opportunity analyst. Given a user profile, identify exactly 20 highly relevant opportunities — a mix of jobs, education/scholarships, and migration pathways.
 
-Return ONLY a valid JSON array with no markdown, no explanation, no backticks. Each item must have exactly these fields:
-- id (number)
-- title (string)
-- org (string, include city/country)
+IMPORTANT RULES:
+1. Return ONLY a valid JSON array, no markdown, no explanation, no backticks.
+2. Include exactly 20 items: approximately 8 jobs, 6 education, 6 migration.
+3. For matchScore: calculate it PROPERLY based on how well the opportunity matches the user's profile:
+   - Start at 50
+   - +10 if the opportunity type matches their stated interests
+   - +10 if their skills/education directly match the requirements
+   - +10 if location/country preference aligns
+   - +10 if experience level matches
+   - +5 if language requirements are met
+   - +5 if deadline is upcoming/rolling (not past)
+   - Cap at 98. Never invent a score — derive it from profile fit.
+4. For url: ONLY use URLs from the trusted lists below. Copy them exactly.
+5. Sort results by matchScore descending.
+
+TRUSTED JOB URLs (pick the most relevant for each job opportunity):
+${jobUrls}
+
+TRUSTED EDUCATION URLs (pick the most relevant for each scholarship/program):
+${eduUrls}
+
+TRUSTED MIGRATION URLs (pick the most relevant for each pathway):
+${migUrls}
+
+Each item must have exactly these fields:
+- id (number 1-20)
+- title (string — specific role/program name)
+- org (string — organisation name + city/country)
 - type ("job" | "education" | "migration")
 - country (string)
-- description (string, max 120 chars)
-- matchScore (number between 70-99)
+- description (string, max 120 chars, specific to the opportunity)
+- matchScore (number, calculated as described above)
+- matchReason (string, 1 sentence explaining WHY this matches the profile)
 - deadline (string, e.g. "Apr 30, 2026" or "Rolling")
-- requirements (array of 2-3 short strings)
-- url (string) — a real working https:// link directly to the opportunity. For jobs: the company careers page. For education: official scholarship application page. For migration: official government immigration page.
-
-Every url must start with https://. Make all opportunities realistic and tailored to the profile. Include a mix of job, education, and migration types.`,
-        messages: [{ role: 'user', content: `Analyse this profile and return 8 opportunities as a JSON array:\n\n${profileSummary}` }],
+- requirements (array of exactly 3 short strings)
+- url (string — copied exactly from the trusted URL list above)`,
+        messages: [{
+          role: 'user',
+          content: `Analyse this profile and return exactly 20 opportunities as a JSON array, sorted by matchScore descending:\n\n${profileSummary}`,
+        }],
       }),
     });
 
@@ -146,11 +220,11 @@ Every url must start with https://. Make all opportunities realistic and tailore
     }
 
     const data = await response.json();
-    const raw  = data.content?.map((i) => i.text || '').join('').trim();
+    const raw   = data.content?.map(i => i.text || '').join('').trim();
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const opportunities = JSON.parse(clean);
 
-    // ── Record actual tokens used ────────────────────────────────────────────
+    // Record tokens used
     const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
     if (tokensUsed > 0) {
       try { await recordUsage(supabase, userId, monthKey, tokensUsed); }

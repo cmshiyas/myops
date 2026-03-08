@@ -667,7 +667,7 @@ export default function App() {
               </p>
             </div>
             <div style={{background:'var(--paper)',border:'1px solid var(--border)',borderRadius:'8px',padding:'1rem',marginBottom:'1.5rem',display:'flex',flexDirection:'column',gap:'.45rem'}}>
-              {['Re-analyse will be disabled','Only 1 opportunity visible','Token allowance removed'].map(item => (
+              {['Re-run analysis disabled','Only 1 opportunity per category visible','Token allowance removed'].map(item => (
                 <div key={item} style={{display:'flex',alignItems:'center',gap:'.5rem',fontSize:'.83rem',color:'var(--muted)'}}>
                   <span style={{color:'var(--rust)'}}>✕</span> {item}
                 </div>
@@ -1175,10 +1175,11 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
 }
 
 // Plan limits config
+// Silver: 1 per category (3 total), Gold: 10 total, Platinum: all 20
 const PLAN_LIMITS = {
-  silver:   { maxOps: 1,  canRerun: false, tokenLimit: 0,    label: 'Silver',   color: '#9ca3af' },
-  gold:     { maxOps: null, canRerun: true, tokenLimit: 2000, label: 'Gold',     color: '#c9a84c' },
-  platinum: { maxOps: null, canRerun: true, tokenLimit: 20000,label: 'Platinum', color: '#7dd3fc' },
+  silver:   { maxOpsPerCat: 1, maxOps: null, canRerun: false, tokenLimit: 0,     label: 'Silver',   color: '#9ca3af' },
+  gold:     { maxOpsPerCat: null, maxOps: 10, canRerun: true,  tokenLimit: 2000,  label: 'Gold',     color: '#c9a84c' },
+  platinum: { maxOpsPerCat: null, maxOps: null, canRerun: true, tokenLimit: 20000, label: 'Platinum', color: '#7dd3fc' },
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -1231,10 +1232,40 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
     }
   }
 
-  // Apply plan limit — silver sees only 1 op per category
-  const allFiltered = dashFilter==='All' ? opportunities : opportunities.filter(o=>o.type?.toLowerCase()===dashFilter.toLowerCase());
-  const visibleOps = plan.maxOps ? allFiltered.slice(0, plan.maxOps) : allFiltered;
-  const lockedOps  = plan.maxOps ? allFiltered.slice(plan.maxOps) : [];
+  // Apply plan limits:
+  // Silver  — 1 per category (job/education/migration) regardless of filter
+  // Gold    — first 10 total
+  // Platinum — all 20
+  const allFiltered = dashFilter === 'All'
+    ? opportunities
+    : opportunities.filter(o => o.type?.toLowerCase() === dashFilter.toLowerCase());
+
+  let visibleOps, lockedOps;
+  if (plan.maxOpsPerCat) {
+    // Silver: show 1 per category from the full list (not filtered)
+    const seen = {};
+    const silverVisible = [];
+    const silverLocked  = [];
+    for (const op of allFiltered) {
+      const t = op.type?.toLowerCase() || 'job';
+      if ((seen[t] || 0) < plan.maxOpsPerCat) {
+        silverVisible.push(op);
+        seen[t] = (seen[t] || 0) + 1;
+      } else {
+        silverLocked.push(op);
+      }
+    }
+    visibleOps = silverVisible;
+    lockedOps  = silverLocked;
+  } else if (plan.maxOps) {
+    // Gold: first 10
+    visibleOps = allFiltered.slice(0, plan.maxOps);
+    lockedOps  = allFiltered.slice(plan.maxOps);
+  } else {
+    // Platinum: all
+    visibleOps = allFiltered;
+    lockedOps  = [];
+  }
 
   return (
     <>
@@ -1330,7 +1361,9 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
           <div style={{textAlign:'center',marginTop:'2rem',padding:'2rem',background:'var(--card)',border:'1.5px dashed var(--border)',borderRadius:'12px'}}>
             <div style={{fontSize:'1.5rem',marginBottom:'.5rem'}}>🔒</div>
             <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:'1.1rem',marginBottom:'.4rem'}}>{lockedOps.length} more opportunit{lockedOps.length>1?'ies':'y'} locked</h3>
-            <p style={{fontSize:'.85rem',color:'var(--muted)',marginBottom:'1rem'}}>Upgrade to Gold or Platinum to unlock all opportunities.</p>
+            <p style={{fontSize:'.85rem',color:'var(--muted)',marginBottom:'1rem'}}>
+              {userPlan === 'silver' ? 'Upgrade to Gold to unlock 10 opportunities, or Platinum for all 20.' : 'Upgrade to Platinum to unlock all 20 opportunities.'}
+            </p>
             <button className="btn-primary" onClick={()=>setPage('pricing')}>View Plans →</button>
           </div>
         )}
@@ -1377,16 +1410,16 @@ function PricingPage({ setModal, user, navigateTo }) {
       name: 'Silver',
       price: 'Free',
       priceSub: '',
-      desc: 'Get started and discover your first opportunity in each category.',
+      desc: 'Get a taste — see 1 opportunity per category from your AI analysis.',
       color: '#9ca3af',
       cta: 'Get Started',
       ctaStyle: 'outline',
       features: [
-        { text: '1 opportunity per category (Job, Education, Migration)', on: true },
+        { text: '1 opportunity per category (3 total from 20 generated)', on: true },
         { text: 'Profile builder', on: true },
         { text: 'Blog & News access', on: true },
-        { text: 'Multiple AI analyses', on: false },
-        { text: 'Full opportunity results', on: false },
+        { text: 'Re-run AI analysis', on: false },
+        { text: '10+ opportunity results', on: false },
         { text: 'Token allowance', on: false },
       ],
     },
@@ -1396,16 +1429,16 @@ function PricingPage({ setModal, user, navigateTo }) {
       name: 'Gold',
       price: '$9',
       priceSub: '/ month',
-      desc: 'Unlock all opportunities and run multiple AI analyses every month.',
+      desc: 'Unlock 10 top-matched opportunities and re-run your analysis monthly.',
       color: '#c9a84c',
       cta: 'Upgrade to Gold',
       ctaStyle: 'primary',
       featured: true,
       features: [
-        { text: 'All opportunities across Job, Education & Migration', on: true },
+        { text: '10 opportunities across Job, Education & Migration', on: true },
         { text: 'Profile builder', on: true },
         { text: 'Blog & News access', on: true },
-        { text: 'Multiple AI analyses per month', on: true },
+        { text: 'Re-run AI analysis anytime', on: true },
         { text: '2,000 tokens / month', on: true },
         { text: 'Priority support', on: false },
       ],
@@ -1416,15 +1449,15 @@ function PricingPage({ setModal, user, navigateTo }) {
       name: 'Platinum',
       price: '$19',
       priceSub: '/ month',
-      desc: 'Everything in Gold with a much higher token limit for power users.',
+      desc: 'All 20 opportunities, maximum tokens, and priority support.',
       color: '#7dd3fc',
       cta: 'Upgrade to Platinum',
       ctaStyle: 'dark',
       features: [
-        { text: 'All opportunities across Job, Education & Migration', on: true },
+        { text: 'All 20 opportunities across Job, Education & Migration', on: true },
         { text: 'Profile builder', on: true },
         { text: 'Blog & News access', on: true },
-        { text: 'Multiple AI analyses per month', on: true },
+        { text: 'Re-run AI analysis anytime', on: true },
         { text: '20,000 tokens / month', on: true },
         { text: 'Priority support', on: true },
       ],
