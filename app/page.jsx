@@ -1195,19 +1195,21 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
             </div>
           )}
           {limitError && (
-            <div className="alert alert-error" style={{marginTop:'1rem',fontSize:'.78rem',textAlign:'left'}}>
-              🚫 {limitError}
+            <div style={{marginTop:'1rem',background:'rgba(184,92,56,.08)',border:'1px solid rgba(184,92,56,.25)',borderRadius:'8px',padding:'.75rem',fontSize:'.78rem',textAlign:'left'}}>
+              <div style={{color:'var(--rust)',marginBottom:'.5rem'}}>🚫 {limitError}</div>
+              <button className="btn-primary" style={{width:'100%',fontSize:'.8rem',padding:'.6rem'}} onClick={() => setPage('pricing')}>
+                ⬆️ Upgrade Plan →
+              </button>
             </div>
           )}
-          {!limitError && pct>=50&&<button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem'}} onClick={handleAnalyze}>✦ Analyse & Find Opportunities</button>}
-          {limitError && <button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem',opacity:.5,cursor:'not-allowed'}} disabled>Limit Reached</button>}
+          {!limitError && pct>=50 && <button className="btn-primary" style={{width:'100%',marginTop:'1.25rem',fontSize:'.82rem'}} onClick={handleAnalyze}>✦ Analyse & Find Opportunities</button>}
         </div>
       </div>
       <div className="profile-form">
         <h2>Your Profile</h2>
         {saved&&<div className="alert alert-success">Profile saved successfully!</div>}
         {saveErr&&<div className="alert alert-error">{saveErr}</div>}
-        {limitError&&<div className="alert alert-error">🚫 {limitError}</div>}
+        {limitError&&<div className="alert alert-error" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'1rem'}}>🚫 {limitError} <button className="btn-primary" style={{fontSize:'.78rem',padding:'.4rem .9rem',whiteSpace:'nowrap'}} onClick={()=>setPage('pricing')}>Upgrade →</button></div>}
         <div className="form-row">
           <div className="form-group"><label>Country</label><input placeholder="e.g. Nigeria" value={form.country} onChange={e=>setForm(f=>({...f,country:e.target.value}))}/></div>
           <div className="form-group"><label>City</label><input placeholder="e.g. Lagos" value={form.city} onChange={e=>setForm(f=>({...f,city:e.target.value}))}/></div>
@@ -1257,10 +1259,12 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
   const filters = ['All','Job','Education','Migration'];
   const plan = PLAN_LIMITS[userPlan] || PLAN_LIMITS.silver;
   const [rerunError, setRerunError] = useState(null);
+  const [rerunLimitHit, setRerunLimitHit] = useState(false);
 
   async function handleRerun() {
     if (!profile || loadingOps) return;
     setRerunError(null);
+    setRerunLimitHit(false);
     setLoadingOps(true);
     // Keep existing ops visible while refreshing
     const profileSummary = `Location: ${profile.city}, ${profile.country}\nAge: ${profile.age}\nEducation: ${profile.education} in ${profile.field}\nExperience: ${profile.experience} years\nSkills: ${(profile.skills||[]).join(', ')}\nInterests: ${(profile.interests||[]).join(', ')}\nLanguages: ${(profile.languages||[]).join(', ')}\nBio: ${profile.bio}`;
@@ -1273,6 +1277,7 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
       const data = await res.json();
       if (data.error === 'limit_reached') {
         setRerunError(data.message || 'Monthly token limit reached. Upgrade your plan for more analyses.');
+        setRerunLimitHit(true);
         return; // Keep existing ops visible
       }
       if (data.error) { setRerunError(data.error); return; }
@@ -1367,9 +1372,28 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
       </div>
       {loadingOps&&<div className="loading-banner"><div className="spinner"/>Claude is analysing your profile and searching the world for opportunities…</div>}
       {rerunError && (
-        <div style={{background:'rgba(184,92,56,.08)',borderBottom:'1px solid rgba(184,92,56,.2)',padding:'.9rem 2rem',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
-          <span style={{fontSize:'.85rem',color:'var(--rust)'}}>{rerunError}</span>
-          {rerunError.includes('limit') && <button className="btn-primary" style={{padding:'.45rem 1rem',fontSize:'.8rem'}} onClick={()=>setPage('pricing')}>Upgrade Plan →</button>}
+        <div style={{
+          background: rerunLimitHit ? 'rgba(184,92,56,.06)' : 'rgba(184,92,56,.08)',
+          borderBottom:'1px solid rgba(184,92,56,.25)',
+          padding:'1.25rem 2rem',
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          gap:'1rem', flexWrap:'wrap'
+        }}>
+          <div style={{display:'flex',alignItems:'center',gap:'.75rem'}}>
+            <span style={{fontSize:'1.25rem'}}>{rerunLimitHit ? '🚫' : '⚠️'}</span>
+            <div>
+              <div style={{fontSize:'.9rem',fontWeight:700,color:'var(--rust)',marginBottom:'.15rem'}}>
+                {rerunLimitHit ? 'Monthly Token Limit Reached' : 'Something went wrong'}
+              </div>
+              <div style={{fontSize:'.82rem',color:'var(--muted)'}}>{rerunError}</div>
+            </div>
+          </div>
+          {rerunLimitHit && (
+            <button className="btn-primary" style={{padding:'.55rem 1.25rem',fontSize:'.85rem',flexShrink:0}}
+              onClick={() => setPage('pricing')}>
+              ⬆️ Upgrade Plan →
+            </button>
+          )}
         </div>
       )}
       <div className="dashboard-body">
