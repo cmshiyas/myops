@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '../../../lib/auth';
 
 const PLAN_TOKEN_LIMITS = {
   silver:   1000,
@@ -6,7 +7,7 @@ const PLAN_TOKEN_LIMITS = {
   platinum: 15000,
 };
 
-// Trusted URL pools per category — Claude must pick from these
+// Full URL pools for Gold/Platinum
 const TRUSTED_URLS = {
   job: [
     'https://www.linkedin.com/jobs/',
@@ -66,6 +67,31 @@ const TRUSTED_URLS = {
   ],
 };
 
+// Compact URL pools for Silver — 5 per category to keep input tokens low
+const TRUSTED_URLS_COMPACT = {
+  job: [
+    'https://www.linkedin.com/jobs/',
+    'https://www.indeed.com/',
+    'https://careers.google.com/',
+    'https://www.amazon.jobs/',
+    'https://grab.careers/',
+  ],
+  education: [
+    'https://www.chevening.org/scholarships/',
+    'https://www.gatescambridge.org/apply/',
+    'https://www.daad.de/en/study-and-research-in-germany/scholarships/',
+    'https://erasmus.ec.europa.eu/opportunities',
+    'https://www.australiaawards.gov.au/',
+  ],
+  migration: [
+    'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html',
+    'https://www.make-it-in-germany.com/en/visa-residence/types/opportunity-card',
+    'https://www.gov.uk/skilled-worker-visa',
+    'https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/skilled-independent-189',
+    'https://www.mom.gov.sg/passes-and-permits/employment-pass',
+  ],
+};
+
 let _supabase = null;
 function getServerSupabase() {
   if (!_supabase) {
@@ -109,12 +135,65 @@ async function recordUsage(supabase, userId, monthKey, newTokens) {
   });
 }
 
+// Build prompt config based on plan
+// Silver: compact URLs, 3 opportunities (1 per category), smaller output budget
+// Gold/Platinum: full URLs, 20 opportunities
+function buildPromptConfig(plan) {
+  const isSilver = plan === 'silver';
+  const urls     = isSilver ? TRUSTED_URLS_COMPACT : TRUSTED_URLS;
+  const count    = isSilver ? 3 : 20;
+  const dist     = isSilver ? '1 job, 1 education, 1 migration' : 'approximately 8 jobs, 6 education, 6 migration';
+
+  const jobUrls = urls.job.map((u,i)      => `${i+1}. ${u}`).join('\n');
+  const eduUrls = urls.education.map((u,i) => `${i+1}. ${u}`).join('\n');
+  const migUrls = urls.migration.map((u,i) => `${i+1}. ${u}`).join('\n');
+
+  const systemPrompt = `You are a global opportunity analyst. Given a user profile, identify exactly ${count} highly relevant opportunities — ${dist}.
+
+IMPORTANT RULES:
+1. Return ONLY a valid JSON array, no markdown, no explanation, no backticks.
+2. Include exactly ${count} items: ${dist}.
+3. For matchScore: calculate it based on profile fit:
+   - Start at 50. +10 skills match. +10 education match. +10 location match. +10 experience match. +5 language match. +5 deadline upcoming. Cap at 98.
+4. For url: ONLY use URLs from the trusted lists below. Copy them exactly.
+5. Sort by matchScore descending.
+
+TRUSTED JOB URLs:
+${jobUrls}
+
+TRUSTED EDUCATION URLs:
+${eduUrls}
+
+TRUSTED MIGRATION URLs:
+${migUrls}
+
+Each item must have exactly:
+- id (number), title, org (with city/country), type ("job"|"education"|"migration"), country
+- description (max 100 chars), matchScore, matchReason (1 sentence), deadline
+- requirements (array of 3 strings), url (from trusted list above)`;
+
+  const userMessage = `Analyse this profile and return exactly ${count} opportunities as a JSON array:\n\n`;
+
+  // Estimate input tokens (chars / 4 + system prompt overhead)
+  const estimatedInputTokens = Math.ceil((jobUrls + eduUrls + migUrls + userMessage + safeSummary).length / 4) + 400;
+
+  // Max output: Silver ~300 tokens (3 compact ops), others up to 4000
+  const maxOutputTokens = isSilver ? 300 : 4000;
+
+  return { systemPrompt, userMessage, estimatedInputTokens, maxOutputTokens, count };
+}
+
 export async function POST(req) {
   try {
-    const { profileSummary, userId } = await req.json();
+    // Verify JWT first — userId comes from the verified token, not the request body
+    const { userId, error: authError } = await verifyAuth(req);
+    if (authError) return authError;
 
+    const { profileSummary } = await req.json();
     if (!profileSummary) return Response.json({ error: 'No profile data provided' }, { status: 400 });
-    if (!userId) return Response.json({ error: 'Authentication required' }, { status: 401 });
+
+    // Sanitise: cap length and strip angle brackets to prevent prompt injection
+    const safeSummary = String(profileSummary).slice(0, 2000).replace(/[<>]/g, '');
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return Response.json({ error: 'Server configuration error' }, { status: 500 });
@@ -139,7 +218,7 @@ export async function POST(req) {
     let monthKey, currentTokens;
     try {
       const usage = await getUsageThisMonth(supabase, userId);
-      monthKey = usage.monthKey;
+      monthKey      = usage.monthKey;
       currentTokens = usage.tokens;
     } catch (e) {
       return Response.json({ error: 'Could not check token usage.' }, { status: 500 });
@@ -153,10 +232,22 @@ export async function POST(req) {
       }, { status: 429 });
     }
 
-    // Build trusted URL lists for the prompt
-    const jobUrls     = TRUSTED_URLS.job.map((u,i) => `${i+1}. ${u}`).join('\n');
-    const eduUrls     = TRUSTED_URLS.education.map((u,i) => `${i+1}. ${u}`).join('\n');
-    const migUrls     = TRUSTED_URLS.migration.map((u,i) => `${i+1}. ${u}`).join('\n');
+    const tokensRemaining = tokenLimit - currentTokens;
+
+    // Build plan-appropriate prompt — Silver gets compact prompt to stay within 1k budget
+    const { systemPrompt, userMessage, estimatedInputTokens, maxOutputTokens } = buildPromptConfig(plan);
+
+    // Pre-flight check: ensure input alone doesn't exceed remaining budget
+    if (estimatedInputTokens >= tokensRemaining) {
+      return Response.json({
+        error: 'limit_reached',
+        message: `Not enough tokens remaining (${tokensRemaining.toLocaleString()} left). Upgrade or wait for your monthly reset on the 1st.`,
+        tokensUsed: currentTokens, tokenLimit, plan,
+      }, { status: 429 });
+    }
+
+    // Cap output tokens to whatever remains after input — prevents any overage
+    const safeMaxOutputTokens = Math.min(maxOutputTokens, tokensRemaining - estimatedInputTokens);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -166,50 +257,10 @@ export async function POST(req) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        system: `You are a global opportunity analyst. Given a user profile, identify exactly 20 highly relevant opportunities — a mix of jobs, education/scholarships, and migration pathways.
-
-IMPORTANT RULES:
-1. Return ONLY a valid JSON array, no markdown, no explanation, no backticks.
-2. Include exactly 20 items: approximately 8 jobs, 6 education, 6 migration.
-3. For matchScore: calculate it PROPERLY based on how well the opportunity matches the user's profile:
-   - Start at 50
-   - +10 if the opportunity type matches their stated interests
-   - +10 if their skills/education directly match the requirements
-   - +10 if location/country preference aligns
-   - +10 if experience level matches
-   - +5 if language requirements are met
-   - +5 if deadline is upcoming/rolling (not past)
-   - Cap at 98. Never invent a score — derive it from profile fit.
-4. For url: ONLY use URLs from the trusted lists below. Copy them exactly.
-5. Sort results by matchScore descending.
-
-TRUSTED JOB URLs (pick the most relevant for each job opportunity):
-${jobUrls}
-
-TRUSTED EDUCATION URLs (pick the most relevant for each scholarship/program):
-${eduUrls}
-
-TRUSTED MIGRATION URLs (pick the most relevant for each pathway):
-${migUrls}
-
-Each item must have exactly these fields:
-- id (number 1-20)
-- title (string — specific role/program name)
-- org (string — organisation name + city/country)
-- type ("job" | "education" | "migration")
-- country (string)
-- description (string, max 120 chars, specific to the opportunity)
-- matchScore (number, calculated as described above)
-- matchReason (string, 1 sentence explaining WHY this matches the profile)
-- deadline (string, e.g. "Apr 30, 2026" or "Rolling")
-- requirements (array of exactly 3 short strings)
-- url (string — copied exactly from the trusted URL list above)`,
-        messages: [{
-          role: 'user',
-          content: `Analyse this profile and return exactly 20 opportunities as a JSON array, sorted by matchScore descending:\n\n${profileSummary}`,
-        }],
+        model:      'claude-sonnet-4-20250514',
+        max_tokens: safeMaxOutputTokens,
+        system:     systemPrompt,
+        messages:   [{ role: 'user', content: `${userMessage}${safeSummary}` }],
       }),
     });
 
@@ -219,12 +270,12 @@ Each item must have exactly these fields:
       return Response.json({ error: 'AI service error', detail: response.status }, { status: 502 });
     }
 
-    const data = await response.json();
-    const raw   = data.content?.map(i => i.text || '').join('').trim();
-    const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    const data         = await response.json();
+    const raw          = data.content?.map(i => i.text || '').join('').trim();
+    const clean        = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const opportunities = JSON.parse(clean);
 
-    // Record tokens used
+    // Record actual tokens used (from Anthropic response — always accurate)
     const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
     if (tokensUsed > 0) {
       try { await recordUsage(supabase, userId, monthKey, tokensUsed); }
@@ -232,11 +283,15 @@ Each item must have exactly these fields:
     }
 
     const totalUsed   = currentTokens + tokensUsed;
-    const percentUsed = tokenLimit > 0 ? Math.min(100, Math.round((totalUsed / tokenLimit) * 100)) : 0;
+    const percentUsed = Math.min(100, Math.round((totalUsed / tokenLimit) * 100));
     const now2        = new Date();
     const resetDate   = new Date(now2.getFullYear(), now2.getMonth() + 1, 1)
                           .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    return Response.json({ opportunities, usage: { tokensUsed: totalUsed, tokenLimit, percentUsed, resetDate, plan } });
+
+    return Response.json({
+      opportunities,
+      usage: { tokensUsed: totalUsed, tokenLimit, percentUsed, resetDate, plan },
+    });
 
   } catch (err) {
     console.error('Analyze route error:', err);

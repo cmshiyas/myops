@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '../../../lib/auth';
+
+const MAX_OPPORTUNITIES = 50; // sanity cap on payload size
 
 function getSupabase() {
   return createClient(
@@ -8,14 +11,12 @@ function getSupabase() {
   );
 }
 
-// GET — load saved opportunities for a user
 export async function GET(req) {
+  const { userId, error: authError } = await verifyAuth(req);
+  if (authError) return authError;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) return Response.json({ error: 'userId required' }, { status: 400 });
-    const supabase = getSupabase();
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('opportunities')
       .select('opportunities, generated_at')
       .eq('user_id', userId)
@@ -27,26 +28,31 @@ export async function GET(req) {
 
     return Response.json({
       opportunities: data?.opportunities || [],
-      generatedAt: data?.generated_at || null,
+      generatedAt:   data?.generated_at || null,
     });
   } catch (err) {
-    console.error('Opportunities GET error:', err);
     return Response.json({ error: 'Failed to load opportunities' }, { status: 500 });
   }
 }
 
-// POST — save opportunities for a user (upsert)
 export async function POST(req) {
+  const { userId, error: authError } = await verifyAuth(req);
+  if (authError) return authError;
+
   try {
-    const { userId, opportunities } = await req.json();
-    if (!userId || !opportunities) {
-      return Response.json({ error: 'userId and opportunities required' }, { status: 400 });
+    const { opportunities } = await req.json();
+
+    if (!Array.isArray(opportunities)) {
+      return Response.json({ error: 'opportunities must be an array' }, { status: 400 });
     }
-    const supabase = getSupabase();
-    const { error } = await supabase
+    if (opportunities.length > MAX_OPPORTUNITIES) {
+      return Response.json({ error: `Too many opportunities (max ${MAX_OPPORTUNITIES})` }, { status: 400 });
+    }
+
+    const { error } = await getSupabase()
       .from('opportunities')
       .upsert({
-        user_id: userId,
+        user_id:      userId,
         opportunities,
         generated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
@@ -54,7 +60,6 @@ export async function POST(req) {
     if (error) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ success: true });
   } catch (err) {
-    console.error('Opportunities POST error:', err);
     return Response.json({ error: 'Failed to save opportunities' }, { status: 500 });
   }
 }

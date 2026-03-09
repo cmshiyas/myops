@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '../../../../lib/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -12,11 +13,11 @@ function getSupabase() {
 }
 
 export async function POST(req) {
-  try {
-    const { userId } = await req.json();
-    const supabase = getSupabase();
+  const { userId, error: authError } = await verifyAuth(req);
+  if (authError) return authError;
 
-    const { data: profile } = await supabase
+  try {
+    const { data: profile } = await getSupabase()
       .from('profiles')
       .select('stripe_customer_id')
       .eq('user_id', userId)
@@ -26,16 +27,16 @@ export async function POST(req) {
       return Response.json({ error: 'No billing account found' }, { status: 404 });
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://myops-tan.vercel.app';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) return Response.json({ error: 'App URL not configured' }, { status: 500 });
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
+      customer:   profile.stripe_customer_id,
       return_url: `${appUrl}/?stripe=portal`,
     });
 
     return Response.json({ url: session.url });
   } catch (err) {
-    console.error('Stripe portal error:', err);
     return Response.json({ error: err.message }, { status: 500 });
   }
 }

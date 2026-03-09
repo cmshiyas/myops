@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '../../../lib/auth';
 
 const PLAN_TOKEN_LIMITS = { silver: 1000, gold: 5000, platinum: 15000 };
 
@@ -15,16 +16,14 @@ function getSupabase() {
 }
 
 export async function GET(req) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    if (!userId) return Response.json({ error: 'userId required' }, { status: 400 });
+  const { userId, error: authError } = await verifyAuth(req);
+  if (authError) return authError;
 
+  try {
     const supabase = getSupabase();
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    // Fetch plan and usage in parallel
     const [profileResult, usageResult] = await Promise.all([
       supabase.from('profiles').select('plan').eq('user_id', userId).single(),
       supabase.from('token_usage').select('tokens_used, last_used_at').eq('user_id', userId).eq('month', monthKey).single(),
@@ -44,10 +43,9 @@ export async function GET(req) {
       month:           monthKey,
       resetDate,
       plan,
-      lastUsedAt: usageResult.data?.last_used_at || null,
+      lastUsedAt:      usageResult.data?.last_used_at || null,
     });
   } catch (err) {
-    console.error('Usage route error:', err);
     return Response.json({ error: 'Failed to fetch usage' }, { status: 500 });
   }
 }
