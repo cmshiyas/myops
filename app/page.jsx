@@ -1146,9 +1146,8 @@ function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, set
     setPage('myops');
     setLoadingOps(true);
     // Don't clear existing ops — keep cached ones visible while new ones load
-    const profileSummary = `Location: ${form.city}, ${form.country}\nAge: ${form.age}\nEducation: ${form.education} in ${form.field}\nExperience: ${form.experience} years\nSkills: ${form.skills.join(', ')}\nInterests: ${form.interests.join(', ')}\nLanguages: ${form.languages.join(', ')}\nBio: ${form.bio}`;
     try {
-      const res = await fetch('/api/analyze', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ profileSummary }) });
+      const res = await fetch('/api/analyze', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ profile: form }) });
       const data = await res.json();
       if (data.error === 'limit_reached') {
         setLimitError(data.message);
@@ -1273,12 +1272,11 @@ function DashboardPage({ opportunities, loadingOps, dashFilter, setDashFilter, p
     setRerunLimitHit(false);
     setLoadingOps(true);
     // Keep existing ops visible while refreshing
-    const profileSummary = `Location: ${profile.city}, ${profile.country}\nAge: ${profile.age}\nEducation: ${profile.education} in ${profile.field}\nExperience: ${profile.experience} years\nSkills: ${(profile.skills||[]).join(', ')}\nInterests: ${(profile.interests||[]).join(', ')}\nLanguages: ${(profile.languages||[]).join(', ')}\nBio: ${profile.bio}`;
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: await authHeaders(),
-        body: JSON.stringify({ profileSummary }),
+        body: JSON.stringify({ profile }),
       });
       const data = await res.json();
       if (data.error === 'limit_reached') {

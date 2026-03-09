@@ -174,13 +174,13 @@ Each item must have exactly:
 
   const userMessage = `Analyse this profile and return exactly ${count} opportunities as a JSON array:\n\n`;
 
-  // Estimate input tokens (chars / 4 + system prompt overhead)
-  const estimatedInputTokens = Math.ceil((jobUrls + eduUrls + migUrls + userMessage + safeSummary).length / 4) + 400;
-
   // Max output: Silver ~300 tokens (3 compact ops), others up to 4000
   const maxOutputTokens = isSilver ? 300 : 4000;
 
-  return { systemPrompt, userMessage, estimatedInputTokens, maxOutputTokens, count };
+  // Return urlText so caller can compute estimatedInputTokens after safeSummary is built
+  const urlText = jobUrls + eduUrls + migUrls;
+
+  return { systemPrompt, userMessage, urlText, maxOutputTokens, count };
 }
 
 export async function POST(req) {
@@ -189,11 +189,36 @@ export async function POST(req) {
     const { userId, error: authError } = await verifyAuth(req);
     if (authError) return authError;
 
-    const { profileSummary } = await req.json();
-    if (!profileSummary) return Response.json({ error: 'No profile data provided' }, { status: 400 });
+    const { profile: rawProfile } = await req.json();
+    if (!rawProfile) return Response.json({ error: 'No profile data provided' }, { status: 400 });
 
-    // Sanitise: cap length and strip angle brackets to prevent prompt injection
-    const safeSummary = String(profileSummary).slice(0, 2000).replace(/[<>]/g, '');
+    // Sanitise each field individually — never trust free-text from the client.
+    // Building the summary server-side from structured fields prevents prompt injection:
+    // a user cannot smuggle "Ignore previous instructions" through a labelled field
+    // that gets slotted into a fixed template.
+    function sanitiseField(val, maxLen = 100) {
+      if (val === null || val === undefined) return '';
+      return String(val)
+        .slice(0, maxLen)
+        .replace(/[\n\r]/g, ' ')   // no newlines — they break prompt structure
+        .replace(/[<>]/g, '')        // no angle brackets
+        .trim();
+    }
+    function sanitiseArray(arr, maxItems = 10, maxLen = 50) {
+      if (!Array.isArray(arr)) return [];
+      return arr.slice(0, maxItems).map(v => sanitiseField(v, maxLen));
+    }
+
+    const safeSummary = [
+      `Location: ${sanitiseField(rawProfile.city)}, ${sanitiseField(rawProfile.country)}`,
+      `Age: ${sanitiseField(rawProfile.age, 3)}`,
+      `Education: ${sanitiseField(rawProfile.education)} in ${sanitiseField(rawProfile.field)}`,
+      `Experience: ${sanitiseField(rawProfile.experience, 3)} years`,
+      `Skills: ${sanitiseArray(rawProfile.skills).join(', ')}`,
+      `Interests: ${sanitiseArray(rawProfile.interests).join(', ')}`,
+      `Languages: ${sanitiseArray(rawProfile.languages).join(', ')}`,
+      `Bio: ${sanitiseField(rawProfile.bio, 300)}`,
+    ].join('\n');
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return Response.json({ error: 'Server configuration error' }, { status: 500 });
@@ -235,7 +260,10 @@ export async function POST(req) {
     const tokensRemaining = tokenLimit - currentTokens;
 
     // Build plan-appropriate prompt — Silver gets compact prompt to stay within 1k budget
-    const { systemPrompt, userMessage, estimatedInputTokens, maxOutputTokens } = buildPromptConfig(plan);
+    const { systemPrompt, userMessage, urlText, maxOutputTokens } = buildPromptConfig(plan);
+
+    // Estimate input tokens now that safeSummary is available (chars / 4 + overhead)
+    const estimatedInputTokens = Math.ceil((urlText + userMessage + safeSummary).length / 4) + 400;
 
     // Pre-flight check: ensure input alone doesn't exceed remaining budget
     if (estimatedInputTokens >= tokensRemaining) {
