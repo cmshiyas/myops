@@ -17,6 +17,7 @@ export async function GET(req) {
     if (!apiKey) return Response.json({ error: 'Not configured' }, { status: 500 });
 
     const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const year = new Date().getFullYear();
 
     const headers = {
       'Content-Type': 'application/json',
@@ -28,24 +29,32 @@ export async function GET(req) {
     const model = 'claude-haiku-4-5-20251001';
     const tools = [{ type: 'web_search_20250305', name: 'web_search' }];
 
-    const systemPrompt = `You are a content curator for a global opportunities platform covering jobs, education, scholarships, and migration.
-Today's date is ${today}.
-Use the web_search tool to find 6 real, recent articles about careers, education, scholarships, migration, or global opportunities.
-After searching, return ONLY a valid JSON array with no markdown, no backticks, no explanation.
-Each item must have exactly:
+    const systemPrompt = `You are a news and trends curator for a global opportunities platform covering jobs, immigration, scholarships, and education. Today's date is ${today}.
+
+Your task: run 3 targeted web searches, then compile the 6 best real articles into a JSON array.
+
+Run these 3 searches in order:
+1. "immigration visa policy news ${year}" — find 2 recent news articles about visa or immigration changes
+2. "international scholarship job opportunities ${year}" — find 2 articles about scholarships or global job market
+3. "remote work abroad education career trends ${year}" — find 2 articles about career or education trends
+
+After all 3 searches, return ONLY a valid JSON array — no markdown, no backticks, no explanation.
+Each of the 6 items must have exactly:
 - id (number 1-6)
 - tag (one of: Career/Education/Migration/Finance/Lifestyle/Policy)
 - emoji (single relevant emoji)
-- title (the real article headline from search results)
-- excerpt (1-2 sentence summary, max 140 chars)
-- date (article publication date, formatted like "Mar 4, 2026")
+- title (exact headline from the article)
+- excerpt (1-2 sentences max 140 chars — what the article actually covers)
+- date (real publication date formatted like "Mar 4, 2026")
 - readTime (estimated read time e.g. "4 min read")
-- bg (one of: #f0f4f8/#f8f4f0/#f0f8f4/#f8f0f4/#f4f8f0/#f0f0f8)
-- url (the exact URL from search results — direct article link)`;
+- bg (cycle through: #f0f4f8, #f8f4f0, #f0f8f4, #f8f0f4, #f4f8f0, #f0f0f8 — one per item)
+- url (exact direct article URL from search results — never a homepage)
+
+Only include articles published in the last 90 days. Prefer reputable outlets: BBC, Reuters, Guardian, Forbes, official government or university sites.`;
 
     let messages = [{
       role: 'user',
-      content: 'Search for 6 recent articles about global opportunities (careers, education, scholarships, migration). Return only the JSON array.'
+      content: 'Run your 3 searches now and return the JSON array of 6 real articles.'
     }];
 
     let iterations = 0;
@@ -97,10 +106,10 @@ Each item must have exactly:
     throw new Error('Max iterations reached without final response');
 
   } catch (err) {
-    console.error('Blog generation error:', err.message);
+    console.error('Blog/News generation error:', err.message);
     if (cache.posts) {
       return Response.json({ posts: cache.posts, generatedAt: new Date(cache.generatedAt).toISOString(), cached: true, stale: true });
     }
-    return Response.json({ error: 'Failed to generate blog posts' }, { status: 500 });
+    return Response.json({ error: 'Failed to generate content' }, { status: 500 });
   }
 }
