@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAuth } from '../../../../lib/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 

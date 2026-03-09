@@ -1,6 +1,13 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 
+// CRITICAL: Tell Next.js not to parse the body — Stripe needs the raw bytes
+// to verify the webhook signature. If the body is parsed first, signature
+// verification always fails with a 400.
+export const config = {
+  api: { bodyParser: false },
+};
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 function getSupabase() {
@@ -31,6 +38,10 @@ export async function POST(req) {
   const body = await req.text();
   const sig  = req.headers.get('stripe-signature');
 
+  console.log('Webhook received. Event signature present:', !!sig);
+  console.log('Body length:', body.length);
+  console.log('STRIPE_WEBHOOK_SECRET set:', !!process.env.STRIPE_WEBHOOK_SECRET);
+
   let event;
   try {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
@@ -38,6 +49,8 @@ export async function POST(req) {
     console.error('Webhook signature verification failed:', err.message);
     return new Response(`Webhook Error: ${err.message}`, { status: 400 });
   }
+
+  console.log('Webhook event type:', event.type);
 
   try {
     switch (event.type) {
@@ -47,7 +60,9 @@ export async function POST(req) {
         const session = event.data.object;
         const userId  = session.metadata?.supabase_user_id;
         const plan    = session.metadata?.plan;
+        console.log('checkout.session.completed — userId:', userId, 'plan:', plan);
         if (userId && plan) await updateUserPlan(userId, plan);
+        else console.warn('Missing userId or plan in session metadata:', session.metadata);
         break;
       }
 

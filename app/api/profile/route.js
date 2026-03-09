@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAuth } from '../../../lib/auth';
 
 let _supabase = null;
 function getSupabase() {

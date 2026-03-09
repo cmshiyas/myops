@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAuth } from '../../../lib/auth';
 
 const MAX_OPPORTUNITIES = 50; // sanity cap on payload size
 
