@@ -511,7 +511,7 @@ export default function App() {
     } catch (_) {}
   }
 
-  const navLinks = ['Home', 'Blog', 'News', 'Pricing', ...(user ? ['Profile', 'MyOps'] : [])];
+  const navLinks = ['Home', 'News & Trends', 'Pricing', ...(user ? ['Profile', 'MyOps'] : [])];
 
   // Persist active page so we can restore it after a refresh
   function navigateTo(p) {
@@ -686,9 +686,8 @@ export default function App() {
 
       <div className="page">
         {page === 'home' && <HomePage setPage={setPage} setModal={setModal} user={user} />}
-        {page === 'blog' && <BlogPage />}
+        {page === 'news & trends' && <BlogPage />}
         {page === 'pricing' && <PricingPage setModal={setModal} user={user} navigateTo={navigateTo} />}
-        {page === 'news' && <NewsPage />}
         {page === 'profile' && (user
           ? <ProfilePage user={user} profile={profile} setProfile={setProfile} setPage={navigateTo} setOpportunities={setOpportunities} setLoadingOps={setLoadingOps} userPlan={user?.plan || 'silver'} initialUsage={usageData} />
           : <div style={{padding:'4rem 2rem',textAlign:'center'}}><p style={{color:'var(--muted)'}}>Please sign in to view your profile.</p></div>
@@ -833,7 +832,7 @@ function HomePage({ setPage, setModal, user }) {
             ? <button className="btn-primary" onClick={() => setPage('myops')}>View My Opportunities →</button>
             : <button className="btn-primary" onClick={() => setModal('signup')}>Get Started Free →</button>
           }
-          <button className="btn-outline" onClick={() => setPage('blog')}>Read Our Blog</button>
+          <button className="btn-outline" onClick={() => setPage('news & trends')}>Latest News & Trends</button>
         </div>
       </div>
       <div className="stats-row">
@@ -849,7 +848,7 @@ function HomePage({ setPage, setModal, user }) {
             ['🧑‍💼','Build Your Profile','Tell us about your location, education, skills, and interests. The more detail, the sharper the AI\'s insights.'],
             ['🤖','AI Analysis by Claude','Sonnet studies your full profile and cross-references thousands of global opportunities across education, work, and migration.'],
             ['🌐','Discover Your MyOps','Receive personalised opportunity tiles on your dashboard — ranked by relevance, match score, and deadline.'],
-            ['📬','Stay Updated','New opportunities are continuously surfaced. Follow our blog and news for the latest in global mobility trends.'],
+            ['📬','Stay Updated','New opportunities are continuously surfaced. Follow our latest news and trends for global mobility insights.'],
           ].map(([icon,title,desc]) => (
             <div className="feature-card" key={title}><div className="feature-icon">{icon}</div><h3>{title}</h3><p>{desc}</p></div>
           ))}
@@ -899,7 +898,7 @@ function BlogPage() {
     <div className="section">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
         <div>
-          <h2 className="section-title" style={{marginBottom:'.4rem'}}>Blog</h2>
+          <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News & Trends</h2>
           <p className="section-sub" style={{margin:0}}>Insights on global careers, education, and migration — curated by Lumivo AI.</p>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
@@ -968,114 +967,6 @@ function BlogPage() {
 }
 
 // ─── NEWS ─────────────────────────────────────────────────────────────────────
-function NewsPage() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [generatedAt, setGeneratedAt] = useState(null);
-  const [fromCache, setFromCache] = useState(false);
-
-  useEffect(() => { loadNews(false); }, []);
-
-  function loadNews(forceRefresh) {
-    setLoading(true); setError(null); setItems([]);
-    fetch(`/api/news${forceRefresh ? '?refresh=1' : ''}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) { setError(d.error); return; }
-        setItems(d.items);
-        setGeneratedAt(d.generatedAt);
-        setFromCache(d.cached || false);
-      })
-      .catch(() => setError('Failed to load news'))
-      .finally(() => setLoading(false));
-  }
-
-  function handleRefresh() { loadNews(true); }
-
-  function timeAgo(iso) {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    const hrs  = Math.floor(diff / 3600000);
-    if (hrs >= 1) return `${hrs}h ago`;
-    if (mins >= 1) return `${mins}m ago`;
-    return 'just now';
-  }
-
-  return (
-    <div className="section">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem',marginBottom:'2rem'}}>
-        <div>
-          <h2 className="section-title" style={{marginBottom:'.4rem'}}>Latest News</h2>
-          <p className="section-sub" style={{margin:0}}>Breaking updates in global mobility, jobs, and education — curated by Lumivo AI.</p>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:'.75rem',flexShrink:0}}>
-          {generatedAt && (
-            <span style={{fontSize:'.72rem',color:'var(--muted)',display:'flex',alignItems:'center',gap:'.35rem'}}>
-              {fromCache && <span style={{background:'rgba(201,168,76,.12)',color:'var(--gold)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:600}}>cached</span>}
-              Updated {timeAgo(generatedAt)}
-            </span>
-          )}
-          <button onClick={handleRefresh} disabled={loading} style={{background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'.4rem .9rem',fontSize:'.78rem',cursor:'pointer',color:'var(--muted)',opacity:loading?0.6:1}}>
-            {loading ? '…' : '↻ Refresh'}
-          </button>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="news-list">
-          {[1,2,3,4,5,6].map(i => (
-            <div key={i} className="news-item" style={{animation:'pulse 1.5s ease infinite'}}>
-              <div style={{width:'80px',height:'22px',background:'#e8e3d9',borderRadius:'4px',flexShrink:0}}/>
-              <div style={{flex:1,display:'flex',flexDirection:'column',gap:'.5rem'}}>
-                <div style={{height:'16px',background:'#e8e3d9',borderRadius:'4px',width:'80%'}}/>
-                <div style={{height:'12px',background:'#e8e3d9',borderRadius:'4px',width:'60%'}}/>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <div style={{textAlign:'center',padding:'3rem',color:'var(--muted)'}}>
-          <div style={{fontSize:'2rem',marginBottom:'.75rem'}}>⚠️</div>
-          <p style={{marginBottom:'1rem'}}>{error}</p>
-          <button className="btn-primary" onClick={handleRefresh}>Try Again</button>
-        </div>
-      )}
-
-      {!loading && !error && (
-        <div className="news-list">
-          {items.map((n,i) => (
-            <a
-              key={n.id}
-              href={n.url || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="news-item"
-              style={{animation:'fadeIn .35s ease both',animationDelay:`${i*60}ms`,textDecoration:'none',color:'inherit',cursor:'pointer'}}
-            >
-              <span className="news-badge" style={n.urgent?{background:'var(--rust)',color:'#fff'}:{}}>{n.badge}</span>
-              <div className="news-content">
-                <h4>{n.title}</h4>
-                <p>{n.desc}</p>
-                <div className="news-date" style={{display:'flex',alignItems:'center',gap:'.5rem',justifyContent:'space-between'}}>
-                  <span style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
-                    {n.urgent && <span style={{fontSize:'.65rem',background:'rgba(184,92,56,.12)',color:'var(--rust)',padding:'.1rem .4rem',borderRadius:'4px',fontWeight:700}}>BREAKING</span>}
-                    {n.date}
-                  </span>
-                  <span style={{color:'var(--gold)',fontSize:'.78rem',fontWeight:600}}>Read →</span>
-                </div>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── PROFILE ─────────────────────────────────────────────────────────────────
 function ProfilePage({ user, profile, setProfile, setPage, setOpportunities, setLoadingOps, initialUsage }) {
   const emptyForm = { country:'',city:'',age:'',education:'',field:'',experience:'',skills:[],interests:[],languages:[],bio:'' };
 
