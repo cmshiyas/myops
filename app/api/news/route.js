@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 let cache = { items: null, generatedAt: null };
