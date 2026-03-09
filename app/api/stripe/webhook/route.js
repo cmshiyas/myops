@@ -1,13 +1,8 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 
-// CRITICAL: Tell Next.js not to parse the body — Stripe needs the raw bytes
-// to verify the webhook signature. If the body is parsed first, signature
-// verification always fails with a 400.
-export const config = {
-  api: { bodyParser: false },
-};
-
+// App Router (app/) reads the raw body via req.text() natively —
+// no bodyParser config needed unlike the old Pages Router.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 function getSupabase() {
