@@ -18,84 +18,60 @@ export async function GET(req) {
 
     const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    const systemPrompt = `You are a content curator for a global opportunities platform covering jobs, education, scholarships, and migration.
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
+        system: `You are a content curator for a global opportunities platform covering jobs, education, scholarships, and migration.
 Today's date is ${today}.
-Use the web_search tool to find 6 real, recent articles or pages about careers, education, scholarships, migration, or global opportunities.
-After searching, return ONLY a valid JSON array with no markdown, no backticks, no explanation.
-Each item must have exactly:
+Return ONLY a valid JSON array with no markdown, no backticks, no explanation.
+
+Each item must have exactly these fields:
 - id (number 1-6)
 - tag (one of: Career/Education/Migration/Finance/Lifestyle/Policy)
 - emoji (single relevant emoji)
-- title (the real article headline)
-- excerpt (1-2 sentence summary of the article, max 140 chars)
-- date (the article's publication date, formatted like "Mar 4, 2026")
-- readTime (estimated read time, e.g. "4 min read")
+- title (string, engaging article-style headline)
+- excerpt (string, 1-2 sentence teaser, max 140 chars)
+- date (a recent date close to today, formatted like "Mar 4, 2026")
+- readTime (e.g. "4 min read")
 - bg (one of: #f0f4f8/#f8f4f0/#f0f8f4/#f8f0f4/#f4f8f0/#f0f0f8)
-- url (the real direct URL to the article — must link to the specific article, not a homepage)`;
+- url (a real working search URL from the list below — use exact format shown)
 
-    const userMessage = 'Search for 6 recent articles about global opportunities (careers, education, scholarships, migration). Return only the JSON array with real article URLs.';
+Use these search URLs — one per post, all different:
+1. https://www.google.com/search?q=how+to+move+abroad+for+work+2026
+2. https://www.google.com/search?q=best+countries+for+skilled+workers+2026
+3. https://www.google.com/search?q=international+scholarship+guide+2026
+4. https://www.google.com/search?q=remote+work+visa+digital+nomad+2026
+5. https://www.google.com/search?q=express+entry+canada+tips+2026
+6. https://www.google.com/search?q=germany+job+seeker+visa+guide+2026
+7. https://www.google.com/search?q=uk+graduate+visa+opportunities+2026
+8. https://www.google.com/search?q=australia+skilled+migration+guide+2026
+9. https://www.google.com/search?q=fully+funded+masters+scholarships+2026
+10. https://www.google.com/search?q=highest+paying+jobs+abroad+2026
+11. https://www.google.com/search?q=singapore+work+visa+guide+2026
+12. https://www.google.com/search?q=europe+blue+card+skilled+workers+2026
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'web-search-2025-03-05',
-    };
-
-    const body = (messages) => JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      system: systemPrompt,
-      messages,
+Pick the 6 most relevant for your chosen topics. Write headlines and excerpts that match each search topic.`,
+        messages: [{
+          role: 'user',
+          content: 'Generate 6 blog post entries about global opportunities. Each must use a different search URL. Return only the JSON array.'
+        }],
+      }),
     });
 
-    const initialRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers,
-      body: body([{ role: 'user', content: userMessage }]),
-    });
-
-    if (!initialRes.ok) {
-      const errText = await initialRes.text();
-      throw new Error(`Claude error: ${initialRes.status} — ${errText}`);
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Claude error: ${response.status} — ${errText}`);
     }
 
-    let messages = [{ role: 'user', content: userMessage }];
-    let currentData = await initialRes.json();
-    let iterations = 0;
-
-    // Agentic loop — keep going until Claude stops using tools
-    while (currentData.stop_reason === 'tool_use' && iterations < 5) {
-      iterations++;
-      messages.push({ role: 'assistant', content: currentData.content });
-
-      const toolResults = currentData.content
-        .filter(block => block.type === 'tool_use')
-        .map(block => ({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: block.input?.query ? `Search completed for: ${block.input.query}` : 'Search completed',
-        }));
-
-      messages.push({ role: 'user', content: toolResults });
-
-      const continueRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers,
-        body: body(messages),
-      });
-
-      if (!continueRes.ok) throw new Error(`Claude continue error: ${continueRes.status}`);
-      currentData = await continueRes.json();
-    }
-
-    const raw = currentData.content
-      ?.filter(i => i.type === 'text')
-      ?.map(i => i.text || '')
-      .join('')
-      .trim();
-
-    if (!raw) throw new Error('No text response from Claude');
-
+    const data = await response.json();
+    const raw = data.content?.map(i => i.text || '').join('').trim();
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const posts = JSON.parse(clean);
 

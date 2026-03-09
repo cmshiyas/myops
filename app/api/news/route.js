@@ -24,26 +24,40 @@ export async function GET(req) {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05',
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        max_tokens: 1500,
         system: `You are a news curator for a global opportunities platform. Today's date is ${today}.
-Use the web_search tool to find 6 real, current news articles about: immigration policy, global job markets, international scholarships, visa changes, remote work, or education opportunities.
-After searching, return ONLY a valid JSON array with no markdown, no backticks, no explanation.
-Each item must have exactly:
+Return ONLY a valid JSON array with no markdown, no backticks, no explanation.
+
+Each item must have exactly these fields:
 - id (number 1-6)
 - badge (short uppercase: POLICY/SCHOLARSHIPS/TECH JOBS/MIGRATION/EDUCATION/VISA/REMOTE WORK)
-- title (the real article headline)
-- desc (1-2 sentences, max 160 chars, summarising the article)
-- date (the article's publication date, e.g. "March 6, 2026")
-- urgent (boolean — true if time-sensitive)
-- url (the real direct URL to the article — must be the actual article link, not a homepage)`,
+- title (string, realistic news headline)
+- desc (string, 1-2 sentences max 160 chars)
+- date (a recent date close to today)
+- urgent (boolean)
+- url (a real, working search URL from the list below — use the exact format shown)
+
+Use these search URLs — one per item, all different:
+1. https://www.google.com/search?q=canada+express+entry+immigration+2026
+2. https://www.google.com/search?q=chevening+scholarship+2026+applications
+3. https://www.google.com/search?q=germany+opportunity+card+visa+2026
+4. https://www.google.com/search?q=uk+skilled+worker+visa+changes+2026
+5. https://www.google.com/search?q=remote+work+jobs+abroad+2026
+6. https://www.google.com/search?q=australia+skilled+migration+visa+2026
+7. https://www.google.com/search?q=fulbright+scholarship+2026+apply
+8. https://www.google.com/search?q=tech+jobs+europe+2026+hiring
+9. https://www.google.com/search?q=erasmus+scholarship+2026
+10. https://www.google.com/search?q=singapore+employment+pass+2026
+11. https://www.google.com/search?q=daad+scholarship+germany+2026
+12. https://www.google.com/search?q=new+zealand+skilled+migrant+visa+2026
+
+Pick the 6 most relevant URLs for your chosen news topics. Write headlines and descriptions that match the search topic.`,
         messages: [{
           role: 'user',
-          content: 'Search for 6 recent news articles about global opportunities (immigration, jobs, scholarships, visas, education). Return only the JSON array with real article URLs.'
+          content: 'Generate 6 news items about global opportunities. Each must use a different search URL from the list. Return only the JSON array.'
         }],
       }),
     });
@@ -54,74 +68,7 @@ Each item must have exactly:
     }
 
     const data = await response.json();
-
-    // Handle agentic loop — Claude may do multiple tool turns before final text
-    // We need to keep sending tool results back until Claude returns stop_reason: 'end_turn'
-    let finalContent = data;
-    let messages = [
-      { role: 'user', content: 'Search for 6 recent news articles about global opportunities (immigration, jobs, scholarships, visas, education). Return only the JSON array with real article URLs.' }
-    ];
-
-    let iterations = 0;
-    let currentData = data;
-
-    while (currentData.stop_reason === 'tool_use' && iterations < 5) {
-      iterations++;
-      // Add assistant message with tool use
-      messages.push({ role: 'assistant', content: currentData.content });
-
-      // Collect tool results
-      const toolResults = currentData.content
-        .filter(block => block.type === 'tool_use')
-        .map(block => ({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: block.input?.query ? `Search completed for: ${block.input.query}` : 'Search completed',
-        }));
-
-      messages.push({ role: 'user', content: toolResults });
-
-      // Continue the conversation
-      const continueRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'web-search-2025-03-05',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          system: `You are a news curator for a global opportunities platform. Today's date is ${today}.
-Use the web_search tool to find 6 real, current news articles about: immigration policy, global job markets, international scholarships, visa changes, remote work, or education opportunities.
-After searching, return ONLY a valid JSON array with no markdown, no backticks, no explanation.
-Each item must have exactly:
-- id (number 1-6)
-- badge (short uppercase: POLICY/SCHOLARSHIPS/TECH JOBS/MIGRATION/EDUCATION/VISA/REMOTE WORK)
-- title (the real article headline)
-- desc (1-2 sentences, max 160 chars, summarising the article)
-- date (the article's publication date, e.g. "March 6, 2026")
-- urgent (boolean — true if time-sensitive)
-- url (the real direct URL to the article — must be the actual article link, not a homepage)`,
-          messages,
-        }),
-      });
-
-      if (!continueRes.ok) throw new Error(`Claude continue error: ${continueRes.status}`);
-      currentData = await continueRes.json();
-    }
-
-    // Extract final text block
-    const raw = currentData.content
-      ?.filter(i => i.type === 'text')
-      ?.map(i => i.text || '')
-      .join('')
-      .trim();
-
-    if (!raw) throw new Error('No text response from Claude');
-
+    const raw = data.content?.map(i => i.text || '').join('').trim();
     const clean = raw.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const items = JSON.parse(clean);
 
